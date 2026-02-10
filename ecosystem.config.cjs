@@ -3,6 +3,7 @@ module.exports = {
     {
       name: 'ussm',
       script: 'src/server.ts',
+      exec_mode: 'fork',
       interpreter: 'node',
       interpreter_args: '--import tsx',
       instances: 1,
