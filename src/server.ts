@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import multer from 'multer';
+import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { config } from './config.js';
@@ -43,6 +44,20 @@ process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Rejection', { reason });
 });
 
+// Security: Rate Limiter
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, 
+  standardHeaders: true, 
+  legacyHeaders: false,
+  // Smart Key: Limit by IP AND Platform ID to prevent distributed Page spam
+  keyGenerator: (req) => {
+    const platformId = req.headers['x-platform-id'] || req.headers['x-fb-page-id'] || 'anonymous';
+    return `${req.ip}_${platformId}`;
+  },
+  message: { success: false, error: 'Too many requests for this platform/IP, please try again later.' }
+});
+
 // Middleware
 app.use(helmet({ contentSecurityPolicy: false })); // Disable CSP for simple demo to allow inline scripts/styles if needed
 app.use(cors());
@@ -76,6 +91,9 @@ app.get('/logo/:pageId', async (req, res) => {
     res.status(404).send('Logo not found');
   }
 });
+
+// Apply Rate Limiter to API routes
+app.use('/v1', apiLimiter);
 
 app.post('/v1/post', upload.array('media'), FISController.createPost);
 app.post('/v1/post/:id/update', FISController.updatePost);

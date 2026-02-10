@@ -152,8 +152,13 @@ Visit the root URL (`https://usmm.global-desk.top`) to view the **Neural Flower 
 
 ---
 
+---
+
 ## ⚡ Technical Specs
-*   **Multi-Tenant Isolation**: Every `x-platform-id` receives a dedicated service instance and private queue.
+*   **Security (Zero-Registration)**: 
+    *   **Tenant-Aware Rate Limiting**: Requests are limited by a combined key of `Sender IP + x-platform-id`. This prevents distributed spam against specific Social Media accounts.
+    *   **Stateless Architecture**: No user database required; credentials are encrypted in-flight and never stored.
+*   **Multi-Tenant Isolation**: Every unique ID receives a dedicated service instance and private priority queue.
 *   **Concurrency**: Optimized for handling **100+ unique project queues** simultaneously.
 *   **Priority System**: 
     *   `10` (Critical): Immediate processing.
