@@ -143,13 +143,32 @@ You can simulate any request without hitting the Facebook API by adding `"dryRun
 
 ---
 
+## 📡 Real-Time Monitoring
+Visit the root URL (`https://usmm.global-desk.top`) to view the **Neural Flower Pipeline**.
+*   **Flower Visualization**: Data enters via the **Stem** (bottom-center) and travels to the **USMM Core**.
+*   **Petal Nodes**: Individual Social Media projects float around the core as "petals," each with a unique neon identity.
+*   **Physics-Engine**: Nodes utilize a force-directed layout to avoid the stem path and bounce off each other, supporting **100+ concurrent projects**.
+*   **Live Tracking**: Data packets follow the real-time movement of tethered nodes, ensuring no data is "lost" visually during high-concurrency stress.
+
+---
+
 ## ⚡ Technical Specs
+*   **Multi-Tenant Isolation**: Every `x-platform-id` receives a dedicated service instance and private queue.
+*   **Concurrency**: Optimized for handling **100+ unique project queues** simultaneously.
 *   **Priority System**: 
     *   `10` (Critical): Immediate processing.
     *   `5` (High): Elevated queue position.
     *   `0` (Normal): Standard background processing.
 *   **API Version**: Facebook Graph API v24.0.
 *   **Fail-Safe**: Automatic transition to text-only if media upload fails or is rejected.
+
+---
+
+## 🧪 Stress Testing
+The system includes simulation scripts to verify high-concurrency handling and UI performance.
+*   **Unit Tests**: `pnpm test` (Basic API validation).
+*   **Load Test**: `pnpm vitest run tests/load.test.ts` (Simulates 15 concurrent requests).
+*   **Live Simulation**: `node tests/live_simulation.js` (Dispatches requests for **100+ concurrent projects** over a 30s window to stress-test the Neural Flower UI).
 
 ---
 

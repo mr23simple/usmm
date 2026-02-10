@@ -15,91 +15,80 @@ body {
   color: #f8fafc;
   overflow: hidden;
   height: 100vh;
+  width: 100vw;
 }
 
 .cyber-container {
-  display: flex;
+  position: relative;
+  width: 100%;
   height: 100%;
-  position: relative;
+  background: radial-gradient(circle at center, #0f172a 0%, #020617 70%);
 }
 
-.column {
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  z-index: 5;
-}
-
-.side-col {
-  width: 200px;
-  padding: 40px 20px;
-}
-
-.col-header {
-  font-size: 0.8rem;
-  letter-spacing: 4px;
-  color: var(--neon-yellow);
-  text-align: center;
-  margin-bottom: 30px;
-  text-shadow: 0 0 10px var(--neon-yellow);
-}
-
-.center-col {
-  flex: 1;
-  justify-content: center;
-  align-items: center;
-}
-
-/* Docks */
-.docks-container {
-  display: flex;
-  flex-direction: column;
-  gap: 40px;
-  align-items: center;
+/* Nodes Layer */
+.nodes-layer {
+  position: absolute;
+  top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 10;
+  pointer-events: none;
 }
 
 .dock {
-  width: 60px;
-  height: 60px;
+  position: absolute;
+  width: 40px; /* Smaller nodes for density */
+  height: 40px;
   background: #0f172a;
   border: 2px solid #1e293b;
   border-radius: 50%;
   display: flex;
   justify-content: center;
   align-items: center;
-  position: relative;
   box-shadow: 0 0 15px rgba(0,0,0,0.5);
-  transition: opacity 0.5s ease-out, transform 0.5s ease-out;
+  transition: opacity 0.5s ease-out;
   animation: fadeIn 0.5s ease-out;
+  transform: translate(-50%, -50%); /* Center anchor */
+  z-index: 20;
 }
 
 .dock img {
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   object-fit: cover;
 }
 
 .dock-glow {
   position: absolute;
-  top: -5px; left: -5px; right: -5px; bottom: -5px;
+  top: -4px; left: -4px; right: -4px; bottom: -4px;
   border-radius: 50%;
   border: 1px solid var(--neon-yellow);
   opacity: 0.4;
-  box-shadow: 0 0 10px var(--neon-yellow);
 }
 
-/* Hub / Hexagon */
+/* Centered Hub */
+.hub-wrapper.centered-hub {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 .usmm-core {
   width: 140px;
   height: 121px;
-  background: var(--neon-pink); /* Outer Pink Line */
+  background: var(--neon-pink);
   clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
   display: flex;
   justify-content: center;
   align-items: center;
   position: relative;
   filter: drop-shadow(0 0 10px var(--neon-pink));
+  transition: filter 0.3s ease;
 }
 
 .core-layer-1 {
@@ -151,18 +140,17 @@ body {
 
 .hub-status {
   position: absolute;
-  bottom: -55px;
+  bottom: -40px;
   width: 300px;
   text-align: center;
-  left: 50%;
-  transform: translateX(-50%);
   font-size: 0.65rem;
   color: #94a3b8;
   text-transform: uppercase;
   letter-spacing: 3px;
+  transition: color 0.3s ease;
 }
 
-/* Wires (SVG) */
+/* Wires */
 .pipeline-svg {
   position: absolute;
   top: 0; left: 0; width: 100%; height: 100%;
@@ -172,10 +160,9 @@ body {
 
 .wire-path {
   fill: none;
-  stroke: var(--neon-yellow);
-  stroke-width: 1.5;
-  opacity: 0.15;
-  transition: opacity 0.5s ease-out;
+  stroke-width: 1;
+  opacity: 0.3;
+  transition: stroke 0.3s ease;
 }
 
 /* Packets */
@@ -183,46 +170,15 @@ body {
   position: absolute;
   top: 0; left: 0; width: 100%; height: 100%;
   pointer-events: none;
-  z-index: 10;
+  z-index: 15;
 }
 
 .packet {
   position: absolute;
-  width: 10px;
-  height: 10px;
-  background: var(--neon-yellow);
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  box-shadow: 0 0 12px var(--neon-yellow);
   transform: translate(-50%, -50%);
-}
-
-.packet.success { background: var(--neon-green); box-shadow: 0 0 12px var(--neon-green); }
-.packet.fail { background: var(--neon-red); box-shadow: 0 0 12px var(--neon-red); }
-
-@keyframes coreProcess {
-  0% { transform: rotate(0deg) scale(1); filter: drop-shadow(0 0 10px var(--neon-pink)); }
-  50% { transform: rotate(180deg) scale(1.1); filter: drop-shadow(0 0 25px var(--neon-pink)); }
-  100% { transform: rotate(360deg) scale(1); filter: drop-shadow(0 0 10px var(--neon-pink)); }
-}
-
-@keyframes counterRotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(-360deg); }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.8); }
-  to { opacity: 1; transform: scale(1); }
-}
-
-.active-core {
-  animation: coreProcess 3s infinite linear;
-}
-
-.active-core .core-inner {
-  animation: counterRotate 3s infinite linear;
-  color: var(--usmm-blue);
-  text-shadow: 0 0 25px var(--usmm-blue);
 }
 
 .dry-run-banner {
@@ -245,45 +201,32 @@ body {
 
 .packet.dry {
   border: 1px solid white;
-  background: #475569;
 }
 
 .packet-label {
-  font-family: 'Tilt Neon', sans-serif;
-  position: absolute;
-  top: -18px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 0.6rem;
-  font-weight: bold;
-  color: white;
-  white-space: nowrap;
+  display: none; /* Hide for density */
 }
 
-.parked-at-hub {
-  /* Packet stays visible at the end of its input path */
-  transform: translate(-50%, -50%) scale(0.8);
-  opacity: 0.5;
+.active-core {
+  animation: coreProcess 3s infinite linear;
 }
 
-.processing-glow {
-  opacity: 1 !important;
-  transform: translate(-50%, -50%) scale(1.2) !important;
-  box-shadow: 0 0 20px white !important;
-  z-index: 15;
+.active-core .core-inner {
+  animation: counterRotate 3s infinite linear;
 }
 
-.fade-out {
-  opacity: 0 !important;
-  transform: scale(0.8) !important;
+@keyframes coreProcess {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.1); }
+  100% { transform: rotate(360deg) scale(1); }
 }
 
-.success-glow-permanent {
-  border-color: var(--neon-green) !important;
-  box-shadow: 0 0 20px var(--neon-green) !important;
+@keyframes counterRotate {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(-360deg); }
 }
 
-.fail-glow-permanent {
-  border-color: var(--neon-red) !important;
-  box-shadow: 0 0 20px var(--neon-red) !important;
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.5); }
+  to { opacity: 1; transform: scale(1); }
 }

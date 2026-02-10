@@ -1,8 +1,7 @@
 const socket = io();
 
 const container = document.querySelector('.cyber-container');
-const inputDocksContainer = document.getElementById('input-docks');
-const outputDocksContainer = document.getElementById('output-docks');
+const nodesLayer = document.getElementById('nodes-layer');
 const coreHub = document.getElementById('core-hub');
 const hubStatus = document.getElementById('hub-status');
 const svgLayer = document.getElementById('pipeline-svg');
@@ -10,119 +9,156 @@ const packetLayer = document.getElementById('packet-layer');
 
 // State
 const pageNodes = new Map(); 
-const activePackets = new Map(); // requestId -> { element, arrivalPromise }
+const activePackets = new Map(); 
+const movingPackets = new Set(); // { el, pathEl, startTime, duration, reverse, resolve }
 const pendingPages = new Set(); 
 const processingPages = new Set(); 
 let rotationTimer = null;
 
 const INACTIVITY_MS = 60000;
+const NEON_COLORS = [
+  '#ff007f', '#ffff00', '#00f3ff', '#00ff00', '#ff00ff', '#ff4d00', '#bc00ff', '#00ffa3'
+];
 
 fetch('/v1/stats').then(res => res.json()).then(data => {
   if (data.dryRun) document.getElementById('dry-run-banner').style.display = 'block';
 });
 
+hubStatus.textContent = '';
+
 socket.on('queue_update', (data) => handleUpdate(data));
 
+function getColorForPage(pageId) {
+  let hash = 0;
+  for (let i = 0; i < pageId.length; i++) {
+    hash = pageId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return NEON_COLORS[Math.abs(hash) % NEON_COLORS.length];
+}
+
 async function handleUpdate(data) {
-  const { pageId, status, profilePic, isDryRun, requestId } = data;
+  const { pageId, status, isDryRun, requestId, profilePic } = data;
+  const pageColor = getColorForPage(pageId);
 
   if (!pageNodes.has(pageId)) {
-    if (pendingPages.has(pageId)) await waitForSetup(pageId);
-    else await setupPageNodes(pageId, profilePic);
+    if (pendingPages.has(pageId)) {
+      await waitForSetup(pageId);
+    } else {
+      await setupPageNode(pageId, profilePic, pageColor);
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
   }
 
-  const nodes = pageNodes.get(pageId);
-  if (!nodes) return;
-  nodes.lastActivity = Date.now();
+  const node = pageNodes.get(pageId);
+  if (!node) return;
+  node.lastActivity = Date.now();
+
+  const containerHeight = container.getBoundingClientRect().height;
 
   if (status === 'queued') {
-    const p = createPacketElement(requestId, 'input', isDryRun);
-    // Store the arrival promise so subsequent phases can wait for it
-    const arrival = movePacket(p, nodes.inPath, 1200).then(() => {
+    // 1. STEM FLOW (Input)
+    const p = createPacketElement(requestId, 'input', isDryRun, pageColor, node.startX, containerHeight);
+    
+    // Animate along the STEM path
+    const arrival = movePacketAlongPath(p, node.stemWire, 1200, false).then(() => {
       p.classList.add('parked-at-hub');
+      p.style.opacity = '0'; 
     });
-    activePackets.set(requestId, { element: p, arrivalPromise: arrival });
+
+    activePackets.set(requestId, { element: p, status: 'traveling_in', arrivalPromise: arrival, pageId });
   } 
   else if (status === 'processing') {
     processingPages.add(pageId);
-    startRotation(isDryRun, pageId);
+    startHubEffect(isDryRun, pageId, pageColor);
     
     const packetData = activePackets.get(requestId);
     if (packetData) {
       await packetData.arrivalPromise;
+      packetData.status = 'processing';
+      packetData.element.style.opacity = '1';
       packetData.element.classList.add('processing-glow');
+      packetData.element.style.setProperty('box-shadow', `0 0 20px ${pageColor}`, 'important');
     }
   } 
   else if (status === 'completed' || status === 'failed') {
     processingPages.delete(pageId);
-    stopRotation(pageId);
+    stopHubEffect(pageId);
 
     const type = status === 'completed' ? 'success' : 'fail';
-    nodes.outDock.className = `dock ${type}-glow-permanent`;
+    node.el.style.setProperty('border-color', pageColor, 'important');
+    node.el.style.setProperty('box-shadow', `0 0 25px ${pageColor}`, 'important');
+    setTimeout(() => {
+      node.el.style.boxShadow = `0 0 15px rgba(0,0,0,0.5)`;
+    }, 500);
     
     const packetData = activePackets.get(requestId);
     if (packetData) {
-      // 1. Wait for input arrival
       await packetData.arrivalPromise;
-      
-      // 2. Artificial "Processing" dwell time for visibility (min 800ms)
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const p = packetData.element;
-      p.classList.remove('parked-at-hub', 'processing-glow');
+      p.classList.remove('processing-glow');
+      p.style.opacity = '1';
       p.classList.add(type);
       
-      // 3. Move to Output
-      await movePacket(p, nodes.outPath, 1000);
+      packetData.status = 'traveling_out';
+      // Animate along the PETAL path (Hub -> Node)
+      await movePacketAlongPath(p, node.wirePath, 1000, true);
       p.remove();
       activePackets.delete(requestId);
     }
   }
 }
 
-function createPacketElement(requestId, type, isDryRun) {
+function createPacketElement(requestId, type, isDryRun, color, x, y) {
   const p = document.createElement('div');
   p.className = `packet ${type} ${isDryRun ? 'dry' : ''}`;
-  if (isDryRun) p.innerHTML = '<span class="packet-label">DRY</span>';
+  p.style.setProperty('background-color', color, 'important');
+  p.style.setProperty('box-shadow', `0 0 12px ${color}`, 'important');
+  p.style.left = `${x}px`;
+  p.style.top = `${y}px`;
   packetLayer.appendChild(p);
   return p;
 }
 
-function movePacket(packetEl, pathEl, duration) {
+// Unified Movement Engine
+function movePacketAlongPath(el, pathEl, duration, reverse) {
   return new Promise(resolve => {
-    const pathData = pathEl.getAttribute('d');
-    packetEl.style.offsetPath = `path('${pathData}')`;
-    
-    const animation = packetEl.animate([
-      { offsetDistance: '0%' },
-      { offsetDistance: '100%' }
-    ], {
-      duration: duration,
-      easing: 'ease-in-out',
-      fill: 'forwards'
+    movingPackets.add({
+      el,
+      pathEl,
+      duration,
+      reverse,
+      resolve,
+      startTime: Date.now()
     });
-
-    animation.onfinish = resolve;
   });
 }
 
-function startRotation(isDryRun, pageId) {
-  if (rotationTimer) clearTimeout(rotationTimer);
+function startHubEffect(isDryRun, pageId, color) {
   coreHub.classList.add('active-core');
+  coreHub.style.setProperty('filter', `drop-shadow(0 0 25px ${color})`, 'important');
+  const coreInner = coreHub.querySelector('.core-inner');
+  if (coreInner) {
+    coreInner.style.setProperty('color', color, 'important');
+    coreInner.style.setProperty('text-shadow', `0 0 20px ${color}`, 'important');
+  }
   const count = processingPages.size;
   hubStatus.textContent = (isDryRun ? '[DRY] ' : '') + (count > 1 ? `SYNCING ${count} PROJECTS` : `SYNCING: ${pageId.slice(0,8)}`);
+  hubStatus.style.setProperty('color', color, 'important');
 }
 
-function stopRotation(pageId) {
+function stopHubEffect(pageId) {
   if (processingPages.size > 0) return;
-  if (rotationTimer) clearTimeout(rotationTimer);
-  rotationTimer = setTimeout(() => {
-    if (processingPages.size === 0) {
-      coreHub.classList.remove('active-core');
-      hubStatus.textContent = 'READY';
-    }
-    rotationTimer = null;
-  }, 2000);
+  coreHub.classList.remove('active-core');
+  coreHub.style.filter = '';
+  const coreInner = coreHub.querySelector('.core-inner');
+  if (coreInner) {
+    coreInner.style.color = '';
+    coreInner.style.textShadow = '';
+  }
+  hubStatus.textContent = '';
+  hubStatus.style.color = '';
 }
 
 function waitForSetup(pageId) {
@@ -133,63 +169,165 @@ function waitForSetup(pageId) {
   });
 }
 
-function setupPageNodes(pageId, profilePic) {
+function setupPageNode(pageId, profilePic, color) {
   return new Promise(resolve => {
     pendingPages.add(pageId);
-    const inDock = createDock(inputDocksContainer, profilePic);
-    const outDock = createDock(outputDocksContainer, profilePic);
-    setTimeout(() => {
-      const inPath = drawWire(inDock, coreHub, 'input');
-      const outPath = drawWire(coreHub, outDock, 'output');
-      pageNodes.set(pageId, { inDock, outDock, inPath, outPath, lastActivity: Date.now() });
-      pendingPages.delete(pageId);
-      resolve();
-    }, 100);
+    const div = document.createElement('div');
+    div.className = 'dock';
+    div.style.setProperty('border-color', color, 'important');
+    div.innerHTML = `<div class="dock-glow" style="border-color: ${color} !important;"></div><img src="${profilePic}" onerror="this.src='https://placehold.co/40?text=USMM'">`;
+    nodesLayer.appendChild(div);
+
+    const containerRect = container.getBoundingClientRect();
+    const centerX = containerRect.width / 2;
+    const centerY = containerRect.height / 2;
+    
+    let angle;
+    do {
+      angle = Math.random() * Math.PI * 2;
+    } while (angle > Math.PI * 0.3 && angle < Math.PI * 0.7);
+
+    const radius = Math.min(centerX, centerY) * (0.5 + Math.random() * 0.3);
+    const startX = centerX + Math.cos(angle) * radius;
+    const startY = centerY + Math.sin(angle) * radius;
+
+    // Permanent Stem Wire (Rectangular) - NARROWER
+    const stemWire = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    stemWire.setAttribute('class', 'wire-path');
+    stemWire.style.setProperty('stroke', color, 'important');
+    stemWire.style.setProperty('opacity', '0.15', 'important');
+    
+    const sWidth = 80; // Smaller width
+    const nodeStartX = centerX + (Math.random() - 0.5) * sWidth;
+    stemWire.setAttribute('d', `M ${nodeStartX} ${containerRect.height} L ${nodeStartX} ${centerY} L ${centerX} ${centerY}`);
+    svgLayer.appendChild(stemWire);
+
+    // Permanent Petal Wire
+    const wire = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    wire.setAttribute('class', 'wire-path');
+    wire.style.setProperty('stroke', color, 'important');
+    wire.style.setProperty('opacity', '0.3', 'important');
+    svgLayer.appendChild(wire);
+
+    const nodeState = { 
+      el: div, 
+      wirePath: wire, 
+      stemWire: stemWire,
+      startX: nodeStartX,
+      x: startX, 
+      y: startY, 
+      vx: 0, 
+      vy: 0, 
+      color, 
+      lastActivity: Date.now() 
+    };
+    pageNodes.set(pageId, nodeState);
+    pendingPages.delete(pageId);
+    resolve();
   });
 }
 
-function createDock(container, img) {
-  const div = document.createElement('div');
-  div.className = 'dock';
-  div.innerHTML = `<div class="dock-glow"></div><img src="${img}" onerror="this.src='https://placehold.co/40?text=USMM'">`;
-  container.appendChild(div);
-  return div;
-}
+function getEase(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
-function getRelativeCenter(el) {
-  const rect = el.getBoundingClientRect();
+function animate() {
   const containerRect = container.getBoundingClientRect();
-  return { x: (rect.left - containerRect.left) + (rect.width / 2), y: (rect.top - containerRect.top) + (rect.height / 2) };
-}
-
-function drawWire(fromEl, toEl, type) {
-  const start = getRelativeCenter(fromEl);
-  const end = getRelativeCenter(toEl);
-  const midX = (start.x + end.x) / 2;
-  const pathData = `M ${start.x} ${start.y} C ${midX} ${start.y}, ${midX} ${end.y}, ${end.x} ${end.y}`;
-  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', pathData);
-  path.setAttribute('class', 'wire-path');
-  svgLayer.appendChild(path);
-  return path;
-}
-
-setInterval(() => {
+  const centerX = containerRect.width / 2;
+  const centerY = containerRect.height / 2;
   const now = Date.now();
-  for (const [pageId, nodes] of pageNodes.entries()) {
-    if (now - nodes.lastActivity > INACTIVITY_MS && !processingPages.has(pageId)) {
-      nodes.inDock.classList.add('fade-out'); nodes.outDock.classList.add('fade-out');
-      nodes.inPath.classList.add('fade-out'); nodes.outPath.classList.add('fade-out');
-      setTimeout(() => { nodes.inDock.remove(); nodes.outDock.remove(); nodes.inPath.remove(); nodes.outPath.remove(); }, 500);
-      pageNodes.delete(pageId);
+
+  for (const [id, node] of pageNodes.entries()) {
+    // Physics
+    for (const [otherId, otherNode] of pageNodes.entries()) {
+      if (id === otherId) continue;
+      const dx = node.x - otherNode.x;
+      const dy = node.y - otherNode.y;
+      const distSq = dx*dx + dy*dy;
+      if (distSq < 4900 && distSq > 0) {
+        const force = 15 / distSq;
+        node.vx += dx * force;
+        node.vy += dy * force;
+      }
+    }
+
+    const dcx = node.x - centerX;
+    const dcy = node.y - centerY;
+    const distCenter = Math.sqrt(dcx*dcx + dcy*dcy);
+    if (distCenter < 140) {
+      node.vx += (dcx / distCenter) * 0.08;
+      node.vy += (dcy / distCenter) * 0.08;
+    }
+
+    if (node.y > centerY) {
+      const distX = Math.abs(node.x - centerX);
+      if (distX < 100) {
+        node.vx += (node.x > centerX ? 1 : -1) * 0.15;
+        node.vy -= 0.03; 
+      }
+    }
+
+    const maxRadius = Math.min(centerX, centerY) * 0.9;
+    if (distCenter > maxRadius) {
+      node.vx -= (dcx / distCenter) * 0.03;
+      node.vy -= (dcy / distCenter) * 0.03;
+    }
+
+    node.x += node.vx;
+    node.y += node.vy;
+    node.vx *= 0.94;
+    node.vy *= 0.94;
+
+    node.el.style.left = `${node.x}px`;
+    node.el.style.top = `${node.y}px`;
+
+    const midX = (node.x + centerX) / 2;
+    const pathData = `M ${node.x} ${node.y} C ${midX} ${node.y}, ${midX} ${centerY}, ${centerX} ${centerY}`;
+    node.wirePath.setAttribute('d', pathData);
+    
+    node.stemWire.setAttribute('d', `M ${node.startX} ${containerRect.height} L ${node.startX} ${centerY} L ${centerX} ${centerY}`);
+  }
+
+  // Unified Packet Movement
+  for (const p of movingPackets) {
+    const elapsed = now - p.startTime;
+    const progress = Math.min(elapsed / p.duration, 1);
+    const eased = getEase(progress);
+    
+    try {
+      const totalLength = p.pathEl.getTotalLength();
+      const point = p.pathEl.getPointAtLength((p.reverse ? 1 - eased : eased) * totalLength);
+      p.el.style.left = `${point.x}px`;
+      p.el.style.top = `${point.y}px`;
+    } catch (e) {
+      // Path might be invalid/removed
+    }
+    
+    if (progress >= 1) { 
+      p.resolve(); 
+      movingPackets.delete(p); 
     }
   }
-}, 5000);
 
-window.addEventListener('resize', () => {
-  svgLayer.innerHTML = ''; 
-  pageNodes.forEach(node => {
-    node.inPath = drawWire(node.inDock, coreHub, 'input');
-    node.outPath = drawWire(coreHub, node.outDock, 'output');
-  });
-});
+  for (const [reqId, data] of activePackets.entries()) {
+    if (data.status === 'processing') {
+      data.element.style.left = `${centerX}px`;
+      data.element.style.top = `${centerY}px`;
+    }
+  }
+
+  for (const [id, node] of pageNodes.entries()) {
+    if (now - node.lastActivity > INACTIVITY_MS && !processingPages.has(id)) {
+      node.el.style.opacity = '0';
+      node.wirePath.style.opacity = '0';
+      node.stemWire.style.opacity = '0';
+      setTimeout(() => { 
+        node.el.remove(); 
+        node.wirePath.remove(); 
+        node.stemWire.remove();
+      }, 500);
+      pageNodes.delete(id);
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+animate();
