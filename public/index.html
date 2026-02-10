@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UFBM | Real-Time Monitor</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>UFBM Live Monitor</h1>
+      <p>Unified Facebook Manager • Real-Time Queue Visualization</p>
+    </header>
+
+    <div class="pipeline">
+      <!-- INPUT: Incoming Requests -->
+      <section class="stage" id="input-stage">
+        <h2>📥 Input Stream</h2>
+        <div class="items-container" id="input-items">
+          <!-- Items enter here -->
+        </div>
+      </section>
+
+      <!-- PROCESS: Active Queues -->
+      <section class="stage" id="process-stage">
+        <h2>⚙️ Processing Queues</h2>
+        <div class="queues-container" id="queues-container">
+          <!-- Dynamic queues per Page ID will appear here -->
+        </div>
+      </section>
+
+      <!-- OUTPUT: Completed/Failed -->
+      <section class="stage" id="output-stage">
+        <h2>📤 Output Log</h2>
+        <div class="items-container vertical-scroll" id="output-items">
+          <!-- Completed items log here -->
+        </div>
+      </section>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
