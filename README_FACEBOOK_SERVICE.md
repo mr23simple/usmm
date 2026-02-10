@@ -1,75 +1,57 @@
 # Facebook Integration Service (FIS) | Architecture Plan
 
-This document outlines the requirements and features for a standalone or modular Facebook backend service designed to handle high-concurrency workloads for the PULSE ecosystem and future projects.
+This document outlines the requirements and features for a high-concurrency Facebook backend service designed to handle diverse workloads with reliability and precision.
 
 ## 🚀 Core Features
 
 ### 1. Concurrency & Queue Management
-*   **Promise-Based Concurrency Limiter**: Implement a semaphore or queue system (e.g., `p-limit`) to restrict the number of simultaneous Graph API calls, preventing IP-based throttling.
-*   **Prioritized Task Queue**: Urgent earthquake alerts (Mag 5.0+) take precedence over scheduled tasks like Daily Summaries.
-*   **Non-Blocking Media Uploads**: Media is uploaded in the background; the post is only published once the Graph API confirms the asset is ready.
+*   **Prioritized Task Queue**: Urgent updates take precedence over routine scheduled tasks.
+*   **Concurrency Limiter**: Restricts the number of simultaneous Graph API calls to prevent throttling.
+*   **Non-Blocking Media Uploads**: Media is processed and uploaded in the background to maximize throughput.
 
 ### 2. High-Reliability Pipeline
-*   **Dual-Path Independence**: Strict separation of **Feed** and **Story** execution paths. A failure in one (e.g., Story asset rejection) must not prevent the Feed post from going live.
-*   **Media ID Reuse**: Upload a single high-resolution asset once and reuse the returned `photo_id` for multiple posts (Feed, Story, and Album) to save bandwidth and quota.
-*   **Smart Backoff & Retries**: Automated retry logic for `429 (Rate Limit)` and `5xx (Facebook Internal)` errors with exponential backoff.
+*   **Dual-Path Independence**: Separation of Feed and Story execution paths. A failure in one path does not affect the other.
+*   **Media ID Reuse**: Upload an asset once and reuse its ID for multiple posts to save bandwidth and quota.
+*   **Smart Backoff & Retries**: Automated retry logic for rate limits and internal API errors with exponential backoff.
 
 ### 3. Rate Limit & Safety
-*   **Global Quota Monitor**: Track Graph API usage in real-time to prevent "Page restricted" status.
-*   **Bundling Prevention**: Integrated delays (e.g., 45s) between consecutive posts to prevent Facebook from "collapsing" or bundling multiple alerts into a single UI element.
-*   **Fail-safe Fallback**: Automatic transition to text-only posting if image generation or upload fails.
+*   **Bundling Prevention**: Integrated delays between consecutive posts to prevent Facebook from grouping multiple updates into a single UI element.
+*   **Fail-safe Fallback**: Automatic transition to text-only posting if media processing or upload fails.
 
 ---
 
-## 🌏 PULSE Section (Workload Integration)
+## 🌏 Workload Integration Examples
 
-The PULSE monitor will interface with this service to deliver real-time seismic alerts.
+The service is designed to handle various types of content and integration patterns.
 
-*   **Significant Event Flow**: Triggered for Mag 2.0+. Significant quakes (M5.0+) trigger an additional "Snapshot" story path.
-*   **Authoritative Updates**: Capability to edit existing `PostIDs` when PHIVOLCS issues revised bulletins, adding the "🔔 AUTHORITATIVE UPDATE" header and revised metrics.
-*   **Deep-Scan Data Preservation**: Preserves line breaks and formatting for Reported and Instrumental Intensities extracted from PHIVOLCS.
-*   **AI Context Injection**: Seamlessly merges Gemini-generated seismic analysis into the post caption.
+*   **Real-time Alerts**: High-priority updates that require immediate broadcast to the Feed and Story.
+*   **Authoritative Updates**: Ability to edit existing posts to reflect revised or corrected information.
+*   **Batch Processing**: Support for consolidating multiple data points into a single, cohesive announcement.
+*   **Automated Summaries**: Scheduled tasks that generate periodic reports or daily highlights.
 
 ---
 
-## 🛠 INIT Section (Service Scaffolding)
-
-*This section provides the requirements for weather alert integration and infographic handling.*
-
-### 📦 Key Features for INIT Workload
-*   **Consolidated Group Posting**: Support for a single post/infographic that represents multiple geographical areas (e.g., grouping 15 cities under one "Severe Heat Advisory").
-*   **Regional Grouping Logic**: Ability to automatically transition between listing individual provinces and consolidating into higher-level region groups (e.g., "Davao Region") when >60% of a group is affected.
-*   **Per-Location Severity Overlays**: Support for mapping specific severity levels (Severe vs Extreme) to individual locations within a single post's metadata.
-*   **Scoped Identity Management**: Enforce the use of `/me` scoped endpoints rather than Global IDs to ensure compatibility with Page Access Tokens.
-*   **Gemini Failure Fallback**: Integrated logic to detect insufficient AI content (e.g., <50 chars) and automatically fallback to a robust formatted template without interrupting the queue.
+## 🛠 Service Configuration
 
 ### Environment Requirements
 ```env
 # Graph API Credentials
 FB_PAGE_ID=
 FB_PAGE_ACCESS_TOKEN=
-FB_APP_ID=
-FB_APP_SECRET=
 
-# Concurrency Settings
+# Service Settings
+PORT=3005
 MAX_CONCURRENT_UPLOADS=3
 POST_SPACING_DELAY_MS=45000
 ```
 
-### Proposed Interface (Internal API)
-```javascript
-/**
- * Initializing the service should support:
- * 1. authenticate() - Validate token health and permissions.
- * 2. uploadMedia(buffer|path) - Returns persistent media ID.
- * 3. createPost(mediaID, caption, options) - Publish to Feed/Story.
- * 4. updatePost(postID, newCaption) - Edit existing content.
- * 5. getPostStats(postID) - Retrieve reach and engagement.
- */
-```
+### Core Interface
+*   **post(payload)**: Publish content to Feed/Story with priority handling.
+*   **updatePost(id, caption)**: Edit existing content on the Page.
+*   **uploadMedia(source)**: Optimize and upload assets to retrieve persistent IDs.
+*   **getStats()**: Monitor queue health and success metrics.
 
-### Workload Definitions
-- **EVENT_ALERT**: Weather warnings (Rainfall, Cyclone). High priority.
-- **SYNTHETIC_ADVISORY**: Custom Heat/UV alerts. Periodic, grouped by hazard.
-- **DAILY_SUMMARY**: Scheduled (07:00 PHT), requires heatmap landscape & portrait.
-- **TSUNAMI_ADVISORY**: Critical priority, text-heavy, immediate broadcast.
+### Priority Definitions
+- **CRITICAL (10)**: Urgent announcements requiring immediate visibility.
+- **HIGH (5)**: Important updates or news.
+- **NORMAL (0)**: Routine content, scheduled posts, and summaries.

@@ -4,3 +4,5 @@ dist
 logs/*.log
 pm2-*.log
 .DS_Store
+public/cache/logos/*.jpg
+public/cache/logos/*.png

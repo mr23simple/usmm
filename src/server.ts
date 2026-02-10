@@ -9,6 +9,8 @@ import { FISController } from './api/controller.js';
 import { logger } from './utils/logger.js';
 import { StreamManager } from './core/StreamManager.js';
 import path from 'path';
+import fs from 'fs';
+import axios from 'axios';
 
 const app = express();
 const httpServer = createServer(app);
@@ -19,6 +21,11 @@ const upload = multer({
     fileSize: 1024 * 1024, // 1MB limit
   }
 });
+
+const LOGO_CACHE_DIR = path.join(process.cwd(), 'public', 'cache', 'logos');
+if (!fs.existsSync(LOGO_CACHE_DIR)) {
+  fs.mkdirSync(LOGO_CACHE_DIR, { recursive: true });
+}
 
 StreamManager.init(io);
 
@@ -46,6 +53,28 @@ app.use(express.static(path.join(process.cwd(), 'public')));
 // Routes
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', uptime: process.uptime() });
+});
+
+app.get('/logo/:pageId', async (req, res) => {
+  const { pageId } = req.params;
+  const fileName = `${pageId}.jpg`;
+  const filePath = path.join(LOGO_CACHE_DIR, fileName);
+
+  if (fs.existsSync(filePath)) {
+    return res.sendFile(filePath);
+  }
+
+  try {
+    const response = await axios.get(`https://graph.facebook.com/${pageId}/picture?type=large`, {
+      responseType: 'arraybuffer'
+    });
+    fs.writeFileSync(filePath, response.data);
+    res.set('Content-Type', 'image/jpeg');
+    res.send(response.data);
+  } catch (error: any) {
+    logger.error('Failed to fetch/cache logo', { pageId, error: error.message });
+    res.status(404).send('Logo not found');
+  }
 });
 
 app.post('/v1/post', upload.array('media'), FISController.createPost);

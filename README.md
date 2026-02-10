@@ -1,6 +1,6 @@
 # Unified Facebook Manager (UFBM)
 
-UFBM is a high-performance, multi-tenant Facebook gateway designed to centralize and optimize Page interactions across the PULSE ecosystem and beyond.
+UFBM is a high-performance, multi-tenant Facebook gateway designed to centralize and optimize Page interactions. It provides a standardized interface for posting content, managing media, and monitoring activity across multiple Facebook Pages.
 
 **Production Endpoint:** `https://ufbm.global-desk.top`
 **Live Monitor:** `https://ufbm.global-desk.top`
@@ -9,49 +9,77 @@ UFBM is a high-performance, multi-tenant Facebook gateway designed to centralize
 
 ## 📖 How to Use UFBM
 
-UFBM operates as a secure proxy. You don't need to configure global credentials; instead, you pass the target Page ID and Token in the request headers.
+UFBM operates as a secure proxy. You can target specific Facebook Pages by providing their credentials in the request headers.
 
-### 1. Mandatory Headers
-To target a specific Facebook Page, include these headers in every request:
+### 1. Request Headers
+To target a specific Facebook Page, include these headers in your request. If omitted, the service may use configured defaults.
 
 | Header | Description |
 | :--- | :--- |
-| `x-fb-page-id` | The numeric ID of the target Facebook Page |
-| `x-fb-token` | A valid Page Access Token with `pages_manage_posts` |
+| `x-fb-page-id` | The numeric ID of the target Facebook Page. |
+| `x-fb-token` | A valid Page Access Token with `pages_manage_posts` permissions. |
 
-### 2. Standard Post (`POST /v1/post`)
-Create a new post on the Feed (and optionally the Story). Supports JSON or Multipart (for images).
+---
 
-**Example Request (JSON):**
-```json
-{
-  "caption": "🚨 SEVERE WEATHER ALERT: Signal #3 issued for...",
-  "priority": 5,
-  "options": {
-    "publishToFeed": true,
-    "publishToStory": true,
-    "dryRun": false
-  }
-}
-```
+### 2. API Endpoints
 
-### 3. Authoritative Update (`POST /v1/post/:id/update`)
-Edit an existing post to reflect revised data (e.g., Magnitude updates).
+#### `POST /v1/post`
+Create a new post on the Page Feed and/or Story. Supports JSON or `multipart/form-data`.
+
+**JSON Parameters:**
+*   `caption` (string, required): The text content of the post.
+*   `media` (array, optional): List of media objects.
+    *   `source` (string/buffer): URL or binary data of the image/video.
+    *   `type` (string): Either `image` or `video`.
+*   `priority` (number, optional): `10` (Critical), `5` (High), `0` (Normal). Defaults to `0`.
+*   `options` (object, optional):
+    *   `publishToFeed` (boolean): Default `true`.
+    *   `publishToStory` (boolean): Default `false`.
+    *   `dryRun` (boolean): Default `false`.
+    *   `retryConfig` (object): (Optional) `{ maxRetries: number, backoffMs: number }`.
 
 **Example Request:**
 ```json
 {
-  "caption": "🔔 AUTHORITATIVE UPDATE: Magnitude revised to 5.4.",
-  "priority": 10,
-  "dryRun": false
+  "caption": "Check out our latest announcement!",
+  "priority": 5,
+  "options": {
+    "publishToFeed": true,
+    "publishToStory": true
+  }
 }
 ```
 
-### 4. Media Uploads
-When using `multipart/form-data`, attach your image/video to the `media` field. 
-*   **Limit**: 1MB per file.
-*   **Resolution**: Max 3000x3000px.
-*   **Auto-Optimization**: UFBM automatically strips metadata and applies high-quality compression to ensure delivery.
+#### `POST /v1/post/:id/update`
+Edit an existing post's caption.
+
+**Parameters:**
+*   `id` (path): The Facebook Post ID.
+*   `caption` (string, required): The new text content.
+*   `priority` (number, optional): Processing priority.
+*   `dryRun` (boolean, optional): If true, simulates the update.
+
+**Example Request:**
+```json
+{
+  "caption": "Update: The event has been rescheduled to 6 PM.",
+  "priority": 10
+}
+```
+
+#### `GET /v1/stats`
+Retrieve global processing statistics, including queue lengths and success rates.
+
+#### `GET /health`
+Basic service health check and uptime information.
+
+---
+
+### 3. Media Processing
+When using `multipart/form-data`, attach your image/video files to the `media` field.
+*   **File Limit**: 1MB per file.
+*   **Max Resolution**: 3000x3000px.
+*   **Auto-Optimization**: UFBM automatically strips metadata and applies high-quality compression to ensure optimal delivery and privacy.
 
 ---
 
@@ -90,32 +118,23 @@ graph TD
 ---
 
 ## 🧪 Testing with Dry Run
-You can simulate a request without hitting the Facebook API by adding `"dryRun": true` to your payload. 
-*   The API will return a mock `postId` (e.g., `DRY_RUN_abc123`).
-*   The **Neural Monitor** will label the data packet as **"DRY"** for visual verification.
-
----
-
-## 📡 Real-Time Monitoring
-Visit the root URL (`https://ufbm.global-desk.top`) to view the **Neural Pipeline**.
-*   **Aesthetic**: Retro-Cyber theme using **Tilt Neon** typography.
-*   **Input/Output Docks**: Neon yellow headers and docking stations.
-*   **Hex Hub**: A dual-line **Hot Pink** equilateral hexagon gear that rotates during processing.
-*   **UFBM Core**: The central engine displays "UFBM" in **Facebook Neon Blue**.
-*   **Auto-Cleanup**: Inactive project docks are gracefully removed after 10 seconds of silence.
+You can simulate any request without hitting the Facebook API by adding `"dryRun": true` to your payload. 
+*   The API returns a mock `postId` (e.g., `DRY_RUN_abc123`).
+*   The **Live Monitor** will label the data packet as **"DRY"** for visual verification.
 
 ---
 
 ## ⚡ Technical Specs
-*   **Rate Limiting**: Sliding window control (default 10 posts/min per Page ID).
-*   **Priority System**: `10` (Critical), `5` (High), `0` (Normal).
+*   **Priority System**: 
+    *   `10` (Critical): Immediate processing.
+    *   `5` (High): Elevated queue position.
+    *   `0` (Normal): Standard background processing.
 *   **API Version**: Facebook Graph API v24.0.
-*   **Fail-Safe**: Automatic transition to text-only if media upload fails.
+*   **Fail-Safe**: Automatic transition to text-only if media upload fails or is rejected.
 
 ---
 
 ## 🛠 Quick Setup (Self-Hosting)
-If you wish to run your own instance:
 1. `pnpm install`
 2. `pnpm dev` (Port 3005)
-3. Build for production: `pnpm build`
+3. `pnpm build`

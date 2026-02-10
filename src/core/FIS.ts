@@ -44,13 +44,22 @@ export class FIS {
     });
 
     return this.queue.add(async () => {
+      const targets = [];
+      if (validated.options?.publishToFeed !== false) targets.push('FEED');
+      if (validated.options?.publishToStory) targets.push('STORY');
+
       StreamManager.emitQueueUpdate(this.pageId, 'processing', { 
-        task: isDryRun ? '[DRY RUN] Simulating...' : 'Starting Upload',
+        task: isDryRun ? `[DRY RUN] Simulating ${targets.join('+')}...` : `Starting ${targets.join('+')} Upload`,
         isDryRun,
         requestId
       });
       
-      logger.debug('Processing queued post task', { requestId, priority: validated.priority, dryRun: isDryRun });
+      logger.debug('Executing task from priority queue', { 
+        requestId, 
+        priority: validated.priority, 
+        targets,
+        dryRun: isDryRun 
+      });
       
       if (isDryRun) {
         await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate processing delay
@@ -86,7 +95,14 @@ export class FIS {
         if (validated.options?.publishToFeed !== false) {
           const res = await this.client.createFeedPost(processedCaption, mediaIds);
           results.push(res);
-          if (res.success) logger.info('Feed post published', { requestId, postId: res.postId });
+          if (res.success) {
+            logger.info('Feed post published successfully', { 
+              requestId, 
+              postId: res.postId, 
+              priority: validated.priority,
+              pageId: this.pageId 
+            });
+          }
         }
 
         if (validated.options?.publishToStory && mediaIds.length > 0) {
@@ -94,7 +110,14 @@ export class FIS {
           if (firstMediaId) {
             const res = await this.client.createStory(firstMediaId);
             results.push(res);
-            if (res.success) logger.info('Story published', { requestId, mediaId: firstMediaId });
+            if (res.success) {
+              logger.info('Story published successfully', { 
+                requestId, 
+                mediaId: firstMediaId, 
+                priority: validated.priority,
+                pageId: this.pageId 
+              });
+            }
           }
         }
 

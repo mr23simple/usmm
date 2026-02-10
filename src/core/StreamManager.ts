@@ -27,8 +27,8 @@ export class StreamManager {
       pageId,
       status,
       timestamp: Date.now(),
-      // Use public graph image (browser will fetch this)
-      profilePic: `https://graph.facebook.com/${pageId}/picture?type=large`, 
+      // Use local logo cache proxy
+      profilePic: `/logo/${pageId}`, 
       ...details
     };
     
