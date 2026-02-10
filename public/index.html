@@ -3,42 +3,48 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>UFBM | Real-Time Monitor</title>
+  <title>UFBM | Neural Pipeline</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tilt+Neon&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>UFBM Live Monitor</h1>
-      <p>Unified Facebook Manager • Real-Time Queue Visualization</p>
-    </header>
-
-    <div class="pipeline">
-      <!-- INPUT: Incoming Requests -->
-      <section class="stage" id="input-stage">
-        <h2>📥 Input Stream</h2>
-        <div class="items-container" id="input-items">
-          <!-- Items enter here -->
-        </div>
-      </section>
-
-      <!-- PROCESS: Active Queues -->
-      <section class="stage" id="process-stage">
-        <h2>⚙️ Processing Queues</h2>
-        <div class="queues-container" id="queues-container">
-          <!-- Dynamic queues per Page ID will appear here -->
-        </div>
-      </section>
-
-      <!-- OUTPUT: Completed/Failed -->
-      <section class="stage" id="output-stage">
-        <h2>📤 Output Log</h2>
-        <div class="items-container vertical-scroll" id="output-items">
-          <!-- Completed items log here -->
-        </div>
-      </section>
+  <div class="cyber-container">
+    <svg id="pipeline-svg" class="pipeline-svg"></svg>
+    <div id="dry-run-banner" class="dry-run-banner" style="display: none;">DRY RUN MODE ACTIVE</div>
+    
+    <!-- LEFT: Input Docks -->
+    <div class="column side-col">
+      <div class="col-header">INPUT DOCKS</div>
+      <div id="input-docks" class="docks-container"></div>
     </div>
+
+    <!-- MIDDLE: The Engine -->
+    <div class="column center-col">
+      <div class="hub-wrapper">
+        <div class="ufbm-core" id="core-hub">
+          <div class="core-layer-1">
+            <div class="core-layer-2">
+              <div class="core-inner">UFBM</div>
+            </div>
+          </div>
+          <div class="core-ring"></div>
+        </div>
+        <div class="hub-status" id="hub-status">READY</div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Output Docks -->
+    <div class="column side-col">
+      <div class="col-header">OUTPUT DOCKS</div>
+      <div id="output-docks" class="docks-container"></div>
+    </div>
+
+    <!-- Animation Layer -->
+    <div id="packet-layer" class="packet-layer"></div>
+
   </div>
   <script src="app.js"></script>
 </body>

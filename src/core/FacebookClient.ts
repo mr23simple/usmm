@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import FormData from 'form-data';
 import type { FISResponse, MediaAsset } from '../types/index.js';
+import { logger } from '../utils/logger.js';
 
 export class FacebookClient {
   private api: AxiosInstance;
@@ -11,6 +12,7 @@ export class FacebookClient {
     this.api = axios.create({
       baseURL: `https://graph.facebook.com/v24.0`,
       params: { access_token: accessToken },
+      proxy: false, // Force bypass any system/environment proxy
     });
   }
 
@@ -84,12 +86,21 @@ export class FacebookClient {
   }
 
   private handleError(error: any): FISResponse {
+    const errorData = error.response?.data;
+    const statusCode = error.response?.status;
+
+    logger.error('Facebook API Error', { 
+      status: statusCode, 
+      data: errorData,
+      message: error.message 
+    });
+
     return {
       success: false,
       error: {
-        code: error.response?.data?.error?.code || 'UNKNOWN',
-        message: error.response?.data?.error?.message || error.message,
-        raw: error.response?.data || error,
+        code: errorData?.error?.code || 'UNKNOWN',
+        message: errorData?.error?.message || error.message,
+        raw: errorData || error,
       },
       timestamp: new Date().toISOString(),
     };

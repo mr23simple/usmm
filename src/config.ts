@@ -8,7 +8,8 @@ const EnvSchema = z.object({
   FB_PAGE_ID: z.string().optional(),
   FB_PAGE_ACCESS_TOKEN: z.string().optional(),
   CONCURRENCY: z.string().default('3').transform(Number),
-  POST_SPACING_DELAY_MS: z.string().default('45000').transform(Number),
+  PUBLISH_RATE_LIMIT: z.string().default('10').transform(Number),
+  DRY_RUN: z.string().default('false').transform((v) => v === 'true'),
   API_KEY: z.string().optional(), // Optional simple auth
 });
 

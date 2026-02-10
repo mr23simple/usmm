@@ -13,7 +13,11 @@ export class StreamManager {
 
   static emit(event: string, data: any) {
     if (this.io) {
-      this.io.emit(event, data);
+      try {
+        this.io.emit(event, data);
+      } catch (err: any) {
+        logger.warn('Socket emit failed', { error: err.message, event });
+      }
     }
   }
 

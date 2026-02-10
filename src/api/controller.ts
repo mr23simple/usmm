@@ -166,7 +166,7 @@ export class FISController {
       }
 
       const { id } = req.params;
-      const { caption, priority } = req.body;
+      const { caption, priority, dryRun } = req.body;
 
       if (!caption) {
         res.status(400).json({ success: false, error: 'Caption is required' });
@@ -178,7 +178,8 @@ export class FISController {
       const result = await fis.updatePost(
         postId, 
         caption, 
-        priority ? Number(priority) : WorkloadPriority.HIGH
+        priority ? Number(priority) : WorkloadPriority.HIGH,
+        dryRun === true || dryRun === 'true'
       );
       
       res.status(result.success ? 200 : 500).json(result);

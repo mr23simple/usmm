@@ -14,6 +14,7 @@ export const PostRequestSchema = z.object({
   options: z.object({
     publishToFeed: z.boolean().default(true),
     publishToStory: z.boolean().default(false),
+    dryRun: z.boolean().default(false),
     retryConfig: z.object({
       maxRetries: z.number().default(3),
       backoffMs: z.number().default(1000),

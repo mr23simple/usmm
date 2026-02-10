@@ -22,6 +22,20 @@ const upload = multer({
 
 StreamManager.init(io);
 
+// Global Error Handlers to prevent EPIPE/Broken Pipe crashes
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught Exception', { error: err.message, stack: err.stack });
+  if ((err as any).code === 'EPIPE') {
+    logger.warn('EPIPE (Broken Pipe) detected. Ignoring to keep server alive.');
+    return;
+  }
+  // For other errors, we might want to exit gracefully depending on severity
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection', { reason });
+});
+
 // Middleware
 app.use(helmet({ contentSecurityPolicy: false })); // Disable CSP for simple demo to allow inline scripts/styles if needed
 app.use(cors());

@@ -17,7 +17,7 @@ export class FISRegistry {
         pageId,
         accessToken,
         concurrency: config.CONCURRENCY,
-        minPostSpacingMs: config.POST_SPACING_DELAY_MS
+        publishRateLimit: config.PUBLISH_RATE_LIMIT
       });
 
       this.instances.set(pageId, instance);
@@ -30,10 +30,11 @@ export class FISRegistry {
    * Returns stats for all active instances.
    */
   static getGlobalStats() {
-    const stats: Record<string, any> = {};
-    for (const [pageId, fis] of this.instances.entries()) {
-      stats[pageId] = fis.stats;
-    }
-    return stats;
+    return {
+      dryRun: config.DRY_RUN,
+      instances: Object.fromEntries(
+        Array.from(this.instances.entries()).map(([id, fis]) => [id, fis.stats])
+      )
+    };
   }
 }
