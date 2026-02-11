@@ -4,293 +4,349 @@ const container = document.querySelector('.cyber-container');
 const nodesLayer = document.getElementById('nodes-layer');
 const coreHub = document.getElementById('core-hub');
 const hubStatus = document.getElementById('hub-status');
-const svgLayer = document.getElementById('pipeline-svg');
-const packetLayer = document.getElementById('packet-layer');
+const canvas = document.getElementById('lily-canvas');
+const ctx = canvas.getContext('2d');
 
-// State
-const pageNodes = new Map(); 
-const activePackets = new Map(); 
-const movingPackets = new Set(); 
-const pendingPages = new Set(); 
+let width, height;
+const pageNodes = new Map(); // pageId -> { el, pistil, color }
+const activeOrbs = new Map(); // requestId -> SpiritOrb
 const processingPages = new Set(); 
-let rotationTimer = null;
+const particles = [];
+const backgroundPistils = [];
+const allPistils = [];
 
-const INACTIVITY_MS = 60000;
-const NEON_COLORS = [
-  '#ff007f', '#ffff00', '#00f3ff', '#00ff00', '#ff00ff', '#ff4d00', '#bc00ff', '#00ffa3'
-];
+const CONFIG = {
+    stamenCount: 100,
+    stamenColor: 'rgba(255, 40, 40, 0.4)', 
+    antherColor: 'rgba(255, 200, 200, 0.8)', 
+    stemColor: 'rgba(100, 20, 20, 0.6)',
+    orbColor: 'rgba(200, 230, 255, 1)',
+    orbGlow: 'rgba(100, 180, 255, 0.5)'
+};
 
-fetch('/v1/stats').then(res => res.json()).then(data => {
-  if (data.dryRun) document.getElementById('dry-run-banner').style.display = 'block';
-});
+// --- Utils ---
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function easeInOutQuad(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
 
-hubStatus.textContent = '';
+function getBezierPoint(t, p0, p1, p2, p3) {
+    const oneMinusT = 1 - t;
+    const tSq = t * t;
+    const tCu = t * t * t;
+    const oneMinusTSq = oneMinusT * oneMinusT;
+    const oneMinusTCu = oneMinusTSq * oneMinusT;
+    const x = oneMinusTCu * p0.x + 3 * oneMinusTSq * t * p1.x + 3 * oneMinusT * tSq * p2.x + tCu * p3.x;
+    const y = oneMinusTCu * p0.y + 3 * oneMinusTSq * t * p1.y + 3 * oneMinusT * tSq * p2.y + tCu * p3.y;
+    return { x, y };
+}
 
-socket.on('queue_update', (data) => handleUpdate(data));
+// --- Classes ---
+
+class Particle {
+    constructor(x, y, color) {
+        this.x = x; this.y = y; this.color = color;
+        this.life = 1.0;
+        this.decay = 0.003 + Math.random() * 0.007; // Slower decay
+        this.vx = (Math.random() - 0.5) * 1.2; // Gentler side spread
+        this.vy = -0.4 - Math.random() * 0.8; // Slower upward drift
+    }
+    update() { 
+        this.x += this.vx; 
+        this.y += this.vy; 
+        this.vx *= 0.99; // Air resistance
+        this.vy *= 0.99;
+        this.life -= this.decay; 
+    }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.life);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class Pistil {
+    constructor(baseAngle, index) {
+        this.baseAngle = baseAngle;
+        this.index = index;
+        this.isGone = false;
+        this.isTargeted = false;
+        this.respawnTime = 0;
+        this.startDelay = index * 20; 
+        this.growthDuration = 1000 + Math.random() * 500;
+        this.lengthVariance = 0.7 + Math.random() * 0.4; 
+        this.swaySpeed = 0.0005 + Math.random() * 0.001; 
+        this.swayPhase = Math.random() * Math.PI * 2;
+        this.swayRange = 0.06 + Math.random() * 0.04; 
+        this.claimedBy = null; // pageId
+        this.color = null;
+    }
+
+    getGeometry(startX, startY, baseScale, timeSinceStart) {
+        const life = timeSinceStart - this.startDelay;
+        if (life < 0) return null;
+        let progress = Math.min(1, life / this.growthDuration);
+        const eased = easeOutCubic(progress);
+        const sway = Math.sin(timeSinceStart * this.swaySpeed + this.swayPhase) * this.swayRange * eased;
+        const currentAngle = this.baseAngle + sway;
+        const currentLen = baseScale * 1.5 * this.lengthVariance * eased;
+        const tipX = startX + (Math.cos(currentAngle) * currentLen);
+        const tipY = startY + (Math.sin(currentAngle) * currentLen * 0.9); 
+        const cp1X = startX + (tipX - startX) * 0.5;
+        const cp1Y = startY + (tipY - startY) * 0.1; 
+        const curlSharpness = currentLen * 0.4;
+        const cp2X = tipX; 
+        const cp2Y = tipY + curlSharpness; 
+        return { p0: { x: startX, y: startY }, p1: { x: cp1X, y: cp1Y }, p2: { x: cp2X, y: cp2Y }, p3: { x: tipX, y: tipY }, progress, eased };
+    }
+
+    draw(startX, startY, baseScale, timeSinceStart) {
+        if (this.isGone) return;
+        const geom = this.getGeometry(startX, startY, baseScale, timeSinceStart);
+        if (!geom) return;
+
+        ctx.beginPath();
+        ctx.moveTo(geom.p0.x, geom.p0.y);
+        ctx.bezierCurveTo(geom.p1.x, geom.p1.y, geom.p2.x, geom.p2.y, geom.p3.x, geom.p3.y);
+        
+        const color = this.color || CONFIG.stamenColor;
+        const grad = ctx.createLinearGradient(geom.p0.x, geom.p0.y, geom.p3.x, geom.p3.y);
+        grad.addColorStop(0, '#300000');
+        grad.addColorStop(0.4, color);
+        grad.addColorStop(1, this.color ? '#ffffff' : '#ffaaaa');
+        
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = this.color ? 1.5 : 1.0; 
+        ctx.stroke();
+
+        if (geom.progress > 0.1) {
+            const circleSize = (this.color ? 3.5 : 2.5) * geom.eased;
+            ctx.beginPath();
+            ctx.arc(geom.p3.x, geom.p3.y, circleSize, 0, Math.PI * 2);
+            ctx.fillStyle = this.color || CONFIG.antherColor;
+            if (this.color) {
+              ctx.shadowBlur = 10;
+              ctx.shadowColor = this.color;
+            }
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+    }
+}
+
+class SpiritOrb {
+    constructor(requestId, targetPistil, color, profilePic) {
+        this.requestId = requestId;
+        this.targetPistil = targetPistil;
+        this.color = color;
+        this.profilePic = profilePic;
+        this.state = 'WAITING'; 
+        this.x = 0; this.y = 0;
+        this.radius = 3; 
+        this.timer = 0;
+        this.finished = false;
+        this.waitDuration = 200;
+        this.stemDuration = 2000; // Even slower stem travel
+        this.pistilDuration = 5000; // Dramatic 5-second travel along the pistil
+        
+        if (profilePic) {
+            this.img = new Image();
+            this.img.src = profilePic;
+        }
+    }
+
+    update(startX, startY, stemHeight, baseScale, timeSinceStart) {
+        if (this.state === 'WAITING') {
+            this.timer += 16;
+            this.x = startX; this.y = startY + stemHeight;
+            if (this.timer > this.waitDuration) { this.state = 'STEM'; this.timer = 0; }
+        } else if (this.state === 'STEM') {
+            this.timer += 16;
+            const t = Math.min(1, this.timer / this.stemDuration);
+            this.x = startX; this.y = (startY + stemHeight) - (stemHeight * t);
+            if (t >= 1) { this.state = 'PISTIL'; this.timer = 0; }
+        } else if (this.state === 'PISTIL') {
+            this.timer += 16;
+            const t = Math.min(1, this.timer / this.pistilDuration);
+            const easedT = easeInOutQuad(t);
+            const geom = this.targetPistil.getGeometry(startX, startY, baseScale, timeSinceStart);
+            if (geom) {
+                const pos = getBezierPoint(easedT, geom.p0, geom.p1, geom.p2, geom.p3);
+                this.x = pos.x; this.y = pos.y;
+            }
+            if (t >= 1) { 
+              this.state = 'FLOAT'; this.timer = 0; 
+              shatterPistil(this.targetPistil, startX, startY, baseScale, timeSinceStart);
+            }
+        } else if (this.state === 'FLOAT') {
+            this.timer += 16;
+            this.y -= 0.6; // Much slower float speed
+            if (this.radius < 10) this.radius += 0.1; // Smaller max size
+            if (this.y < -100) this.finished = true;
+        }
+    }
+
+    draw(ctx) {
+        ctx.save();
+        const pulse = 1 + Math.sin(Date.now() * 0.01) * 0.2;
+        const glowRadius = this.radius * (this.state === 'FLOAT' ? 2 : 4) * pulse;
+        
+        const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, glowRadius);
+        grad.addColorStop(0, this.color);
+        grad.addColorStop(0.4, this.color + '80');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        
+        ctx.fillStyle = grad;
+        ctx.beginPath(); 
+        ctx.arc(this.x, this.y, glowRadius, 0, Math.PI * 2); 
+        ctx.fill();
+
+        if (this.state === 'FLOAT' && this.img && this.img.complete && this.img.naturalWidth !== 0) {
+            // Draw logo inside the orb
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.clip();
+            ctx.drawImage(this.img, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
+        } else {
+            // Core
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); 
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2); 
+            ctx.fill();
+        }
+        
+        ctx.restore();
+    }
+}
+
+// --- Functions ---
+
+function shatterPistil(pistil, startX, startY, baseScale, time) {
+    pistil.isGone = true;
+    pistil.respawnTime = time + 6000; // Stay shattered longer (6 seconds)
+    const geom = pistil.getGeometry(startX, startY, baseScale, time);
+    if (!geom) return;
+    // Dramatic increase in particle count
+    for (let i = 0; i <= 80; i++) {
+        const t = i / 80;
+        const pos = getBezierPoint(t, geom.p0, geom.p1, geom.p2, geom.p3);
+        particles.push(new Particle(pos.x, pos.y, pistil.color || CONFIG.stamenColor));
+    }
+}
+
+function initLily() {
+    allPistils.length = 0;
+    const startAngle = -Math.PI * 0.95; 
+    const endAngle = -Math.PI * 0.05;   
+    for (let i = 0; i < CONFIG.stamenCount; i++) {
+        const t = i / (CONFIG.stamenCount - 1);
+        const angle = startAngle + (endAngle - startAngle) * t;
+        allPistils.push(new Pistil(angle, i));
+    }
+}
+
+function resize() {
+    width = canvas.width = container.clientWidth;
+    height = canvas.height = container.clientHeight;
+    initLily();
+}
 
 function getColorForPage(pageId) {
+  const NEON_COLORS = ['#ff007f', '#ffff00', '#00f3ff', '#00ff00', '#ff00ff', '#ff4d00', '#bc00ff', '#00ffa3'];
   let hash = 0;
-  for (let i = 0; i < pageId.length; i++) {
-    hash = pageId.charCodeAt(i) + ((hash << 5) - hash);
-  }
+  for (let i = 0; i < pageId.length; i++) hash = pageId.charCodeAt(i) + ((hash << 5) - hash);
   return NEON_COLORS[Math.abs(hash) % NEON_COLORS.length];
 }
 
 async function handleUpdate(data) {
-  const { platform, pageId, status, isDryRun, requestId, profilePic } = data;
-  const pageColor = getColorForPage(pageId);
+    const { platform, pageId, status, isDryRun, requestId, profilePic } = data;
+    const neonRed = '#ff2828'; // Consistent Lily Red
 
-  if (!pageNodes.has(pageId)) {
-    if (pendingPages.has(pageId)) {
-      await waitForSetup(pageId);
-    } else {
-      setupPageNode(pageId, profilePic, pageColor, platform);
+    if (!pageNodes.has(pageId)) {
+        const unclaimed = allPistils.filter(p => !p.claimedBy);
+        if (unclaimed.length === 0) return; // Global limit: 100 concurrent project nodes
+        
+        const targetPistil = unclaimed[Math.floor(Math.random() * unclaimed.length)];
+        targetPistil.claimedBy = pageId;
+        targetPistil.color = neonRed;
+        
+        pageNodes.set(pageId, { pistil: targetPistil, color: neonRed, profilePic });
     }
-  }
 
-  const node = pageNodes.get(pageId);
-  if (!node) return;
-  node.lastActivity = Date.now();
+    const node = pageNodes.get(pageId);
+    if (status === 'queued') {
+        if (activeOrbs.size >= 100) return; // Global limit: 100 concurrent spirit orbs
+        const orb = new SpiritOrb(requestId, node.pistil, neonRed, profilePic);
+        activeOrbs.set(requestId, orb);
+    } else if (status === 'processing') {
+        processingPages.add(pageId);
+        coreHub.classList.add('active-core');
+        coreHub.style.setProperty('filter', `drop-shadow(0 0 25px ${neonRed})`, 'important');
+        hubStatus.textContent = `SYNCING: ${pageId.slice(0,8)}`;
+        hubStatus.style.color = neonRed;
+    } else if (status === 'completed' || status === 'failed') {
+        processingPages.delete(pageId);
+        if (processingPages.size === 0) {
+            coreHub.classList.remove('active-core');
+            coreHub.style.filter = '';
+            hubStatus.textContent = 'READY';
+            hubStatus.style.color = '';
+        }
+    }
+}
 
-  const height = container.clientHeight;
+function animate(currentTime) {
+    ctx.clearRect(0, 0, width, height);
+    const timeSinceStart = currentTime;
+    const startX = width / 2;
+    const startY = height * 0.8; 
+    const stemHeight = height - startY;
+    const baseScale = Math.min(width, height) * 0.35;
 
-  if (status === 'queued') {
-    const p = createPacketElement(requestId, 'input', isDryRun, pageColor, node.startX, height);
-    const arrival = movePacketAlongPath(p, node.stemWire, 1200, false).then(() => {
-      p.classList.add('parked-at-hub');
-      p.style.opacity = '0'; 
+    // Stem
+    ctx.beginPath();
+    ctx.moveTo(startX, startY);
+    ctx.lineTo(startX, height);
+    ctx.strokeStyle = CONFIG.stemColor;
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    
+    // Core Bulb
+    ctx.beginPath();
+    ctx.arc(startX, startY, 20, 0, Math.PI * 2);
+    ctx.fillStyle = '#400000';
+    ctx.fill();
+
+    // Regeneration
+    allPistils.forEach(p => {
+        if (p.isGone && timeSinceStart > p.respawnTime) {
+            p.isGone = false;
+            p.startDelay = timeSinceStart;
+            p.color = null; // Reset to default color
+            p.claimedBy = null; // Make available again
+        }
+        p.draw(startX, startY, baseScale, timeSinceStart);
     });
-    activePackets.set(requestId, { element: p, status: 'traveling_in', arrivalPromise: arrival, pageId });
-  } 
-  else if (status === 'processing') {
-    processingPages.add(pageId);
-    startHubEffect(isDryRun, pageId, pageColor);
-    const packetData = activePackets.get(requestId);
-    if (packetData) {
-      await packetData.arrivalPromise;
-      packetData.status = 'processing';
-      packetData.element.style.opacity = '1';
-      packetData.element.classList.add('processing-glow');
-      packetData.element.style.setProperty('box-shadow', `0 0 20px ${pageColor}`, 'important');
+
+    // Particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        particles[i].update();
+        particles[i].draw(ctx);
+        if (particles[i].life <= 0) particles.splice(i, 1);
     }
-  } 
-  else if (status === 'completed' || status === 'failed') {
-    processingPages.delete(pageId);
-    stopHubEffect(pageId);
-    const type = status === 'completed' ? 'success' : 'fail';
-    node.el.style.setProperty('border-color', pageColor, 'important');
-    node.el.style.setProperty('box-shadow', `0 0 25px ${pageColor}`, 'important');
-    setTimeout(() => { if (node.el) node.el.style.boxShadow = `0 0 15px rgba(0,0,0,0.5)`; }, 500);
-    const packetData = activePackets.get(requestId);
-    if (packetData) {
-      await packetData.arrivalPromise;
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const p = packetData.element;
-      p.classList.remove('processing-glow');
-      p.style.opacity = '1';
-      p.classList.add(type);
-      packetData.status = 'traveling_out';
-      await movePacketAlongPath(p, node.wirePath, 1000, true);
-      p.remove();
-      activePackets.delete(requestId);
+
+    // Orbs
+    for (const [id, orb] of activeOrbs.entries()) {
+        orb.update(startX, startY, stemHeight, baseScale, timeSinceStart);
+        orb.draw(ctx);
+        if (orb.finished) activeOrbs.delete(id);
     }
-  }
+
+    requestAnimationFrame(animate);
 }
 
-function createPacketElement(requestId, type, isDryRun, color, x, y) {
-  const p = document.createElement('div');
-  p.className = `packet ${type} ${isDryRun ? 'dry' : ''}`;
-  p.style.setProperty('background-color', color, 'important');
-  p.style.setProperty('box-shadow', `0 0 12px ${color}`, 'important');
-  p.style.left = `${x}px`;
-  p.style.top = `${y}px`;
-  packetLayer.appendChild(p);
-  return p;
-}
-
-function movePacketAlongPath(el, pathEl, duration, reverse) {
-  return new Promise(resolve => {
-    movingPackets.add({ el, pathEl, duration, reverse, resolve, startTime: Date.now() });
-  });
-}
-
-function startHubEffect(isDryRun, pageId, color) {
-  coreHub.classList.add('active-core');
-  coreHub.style.setProperty('filter', `drop-shadow(0 0 25px ${color})`, 'important');
-  const coreInner = coreHub.querySelector('.core-inner');
-  if (coreInner) {
-    coreInner.style.setProperty('color', color, 'important');
-    coreInner.style.setProperty('text-shadow', `0 0 20px ${color}`, 'important');
-  }
-  const count = processingPages.size;
-  hubStatus.textContent = (isDryRun ? '[DRY] ' : '') + (count > 1 ? `SYNCING ${count} PROJECTS` : `SYNCING: ${pageId.slice(0,8)}`);
-  hubStatus.style.setProperty('color', color, 'important');
-}
-
-function stopHubEffect(pageId) {
-  if (processingPages.size > 0) return;
-  coreHub.classList.remove('active-core');
-  coreHub.style.filter = '';
-  const coreInner = coreHub.querySelector('.core-inner');
-  if (coreInner) { coreInner.style.color = ''; coreInner.style.textShadow = ''; }
-  hubStatus.textContent = '';
-  hubStatus.style.color = '';
-}
-
-function waitForSetup(pageId) {
-  return new Promise(resolve => {
-    const interval = setInterval(() => {
-      if (pageNodes.has(pageId)) { clearInterval(interval); resolve(); }
-    }, 50);
-  });
-}
-
-function setupPageNode(pageId, profilePic, color, platform) {
-  pendingPages.add(pageId);
-  const width = container.clientWidth;
-  const height = container.clientHeight;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  
-  let angle;
-  do { angle = Math.random() * Math.PI * 2; } while (angle > Math.PI * 0.3 && angle < Math.PI * 0.7);
-  const radius = Math.min(centerX, centerY) * (0.5 + Math.random() * 0.3);
-  const startX = centerX + Math.cos(angle) * radius;
-  const startY = centerY + Math.sin(angle) * radius;
-  const nodeStartX = centerX + (Math.random() - 0.5) * (width < 600 ? 40 : 60);
-
-  const div = createDock(nodesLayer, profilePic, color, platform);
-  div.style.left = `${startX}px`;
-  div.style.top = `${startY}px`;
-  div.style.opacity = '0'; 
-
-  const stemWire = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  stemWire.setAttribute('class', 'wire-path');
-  stemWire.style.setProperty('stroke', color, 'important');
-  stemWire.style.setProperty('opacity', '0'); 
-  stemWire.setAttribute('d', `M ${nodeStartX} ${height} L ${nodeStartX} ${centerY} L ${centerX} ${centerY}`);
-
-  const wire = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  wire.setAttribute('class', 'wire-path');
-  wire.style.setProperty('stroke', color, 'important');
-  wire.style.setProperty('opacity', '0'); 
-  const midX = (startX + centerX) / 2;
-  wire.setAttribute('d', `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${centerY}, ${centerX} ${centerY}`);
-
-  svgLayer.appendChild(stemWire);
-  svgLayer.appendChild(wire);
-
-  const nodeState = { 
-    el: div, wirePath: wire, stemWire: stemWire, startX: nodeStartX,
-    x: startX, y: startY, vx: 0, vy: 0, color, lastActivity: Date.now(),
-    isNew: true 
-  };
-  pageNodes.set(pageId, nodeState);
-  pendingPages.delete(pageId);
-}
-
-function createDock(containerEl, img, color, platform) {
-  const div = document.createElement('div');
-  div.className = 'dock';
-  div.style.setProperty('border-color', color, 'important');
-  div.style.setProperty('box-shadow', `0 0 10px ${color}`, 'important');
-  const label = platform ? platform.toUpperCase() : 'USMM';
-  div.innerHTML = `<div class="dock-glow" style="border-color: ${color} !important; box-shadow: 0 0 10px ${color} !important"></div><img src="${img}" onerror="this.src='https://placehold.co/40?text=${label}'">`;
-  containerEl.appendChild(div);
-  return div;
-}
-
-function getEase(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
-
-function animate() {
-  const width = container.clientWidth;
-  const height = container.clientHeight;
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const now = Date.now();
-
-  for (const [id, node] of pageNodes.entries()) {
-    for (const [otherId, otherNode] of pageNodes.entries()) {
-      if (id === otherId) continue;
-      const dx = node.x - otherNode.x;
-      const dy = node.y - otherNode.y;
-      const distSq = dx*dx + dy*dy;
-      const minDist = width < 600 ? 1600 : 4900; 
-      if (distSq < minDist && distSq > 0) {
-        const force = (width < 600 ? 8 : 15) / distSq;
-        node.vx += dx * force;
-        node.vy += dy * force;
-      }
-    }
-    const dcx = node.x - centerX;
-    const dcy = node.y - centerY;
-    const distCenter = Math.sqrt(dcx*dcx + dcy*dcy);
-    const hubRepulsionDist = width < 600 ? 100 : 160;
-    if (distCenter < hubRepulsionDist) {
-      const force = (hubRepulsionDist - distCenter) * 0.005;
-      node.vx += (dcx / distCenter) * force;
-      node.vy += (dcy / distCenter) * force;
-    }
-    if (node.y > centerY) {
-      const distX = Math.abs(node.x - centerX);
-      const wallWidth = width < 600 ? 50 : 80;
-      if (distX < wallWidth) {
-        node.vx += (node.x > centerX ? 1 : -1) * 0.15;
-        node.vy -= 0.03; 
-      }
-    }
-    node.vx -= (dcx / distCenter) * 0.015;
-    node.vy -= (dcy / distCenter) * 0.015;
-    node.vx += (Math.random() - 0.5) * 0.02;
-    node.vy += (Math.random() - 0.5) * 0.02;
-    node.x += node.vx; node.y += node.vy;
-    node.vx *= 0.94; node.vy *= 0.94;
-
-    if (node.x < 30) node.x = 30;
-    if (node.x > width - 30) node.x = width - 30;
-    if (node.y < 30) node.y = 30;
-    if (node.y > height - 30) node.y = height - 30;
-
-    node.el.style.left = `${node.x}px`;
-    node.el.style.top = `${node.y}px`;
-    const midX = (node.x + centerX) / 2;
-    node.wirePath.setAttribute('d', `M ${node.x} ${node.y} C ${midX} ${node.y}, ${midX} ${centerY}, ${centerX} ${centerY}`);
-    node.stemWire.setAttribute('d', `M ${node.startX} ${height} L ${node.startX} ${centerY} L ${centerX} ${centerY}`);
-
-    if (node.isNew) {
-      node.el.style.opacity = '1';
-      node.wirePath.style.setProperty('opacity', '0.3', 'important');
-      node.stemWire.style.setProperty('opacity', '0.15', 'important');
-      node.isNew = false;
-    }
-  }
-
-  for (const p of movingPackets) {
-    const elapsed = now - p.startTime;
-    const progress = Math.min(elapsed / p.duration, 1);
-    const eased = getEase(progress);
-    try {
-      const totalLength = p.pathEl.getTotalLength();
-      const point = p.pathEl.getPointAtLength((p.reverse ? 1 - eased : eased) * totalLength);
-      p.el.style.left = `${point.x}px`;
-      p.el.style.top = `${point.y}px`;
-    } catch (e) {}
-    if (progress >= 1) { p.resolve(); movingPackets.delete(p); }
-  }
-  for (const [reqId, data] of activePackets.entries()) {
-    if (data.status === 'processing') {
-      data.element.style.left = `${centerX}px`;
-      data.element.style.top = `${centerY}px`;
-    }
-  }
-
-  for (const [id, node] of pageNodes.entries()) {
-    if (now - node.lastActivity > INACTIVITY_MS && !processingPages.has(id)) {
-      node.el.style.opacity = '0'; node.wirePath.style.opacity = '0'; node.stemWire.style.opacity = '0';
-      setTimeout(() => { if (node.el) node.el.remove(); node.wirePath.remove(); node.stemWire.remove(); }, 500);
-      pageNodes.delete(id);
-    }
-  }
-  requestAnimationFrame(animate);
-}
-animate();
+socket.on('queue_update', handleUpdate);
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(animate);

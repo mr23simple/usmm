@@ -111,7 +111,8 @@ export class TwitterClient {
     const user = await this.api.v2.me({ 'user.fields': ['profile_image_url'] });
     // Twitter returns a 'normal' sized image by default, we want it larger if possible
     // normal is 48x48, we can replace '_normal' with '' for original size or '_400x400'
-    return user.data.profile_image_url.replace('_normal', '_400x400');
+    const url = user.data.profile_image_url;
+    return url ? url.replace('_normal', '_400x400') : 'https://placehold.co/400?text=Twitter';
   }
 
   private handleError(error: any): FISResponse {

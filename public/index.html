@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>USMM | Neural Pipeline</title>
+  <title>USMM | Spider Pipeline</title>
   <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-16x16.png">
@@ -17,28 +17,19 @@
 </head>
 <body>
   <div class="cyber-container">
-    <svg id="pipeline-svg" class="pipeline-svg"></svg>
+    <canvas id="lily-canvas"></canvas>
     <div id="dry-run-banner" class="dry-run-banner" style="display: none;">DRY RUN MODE ACTIVE</div>
     
-    <!-- Floating Nodes Layer -->
+    <!-- Floating Nodes Layer (Logos) -->
     <div id="nodes-layer" class="nodes-layer"></div>
 
-    <!-- The Engine (Centered) -->
-    <div class="hub-wrapper centered-hub">
-      <div class="usmm-core" id="core-hub">
-        <div class="core-layer-1">
-          <div class="core-layer-2">
-            <div class="core-inner">USMM</div>
-          </div>
-        </div>
-        <div class="core-ring"></div>
+    <!-- The Engine -->
+    <div class="hub-wrapper" id="hub-wrapper">
+      <div class="usmm-core-container" id="core-hub">
+        <img src="/images/USMM-logo2-full-transparent.png" class="usmm-logo" alt="USMM Core">
       </div>
-      <div class="hub-status" id="hub-status">READY</div>
+      <div id="hub-status" class="hub-status">READY</div>
     </div>
-
-    <!-- Animation Layer -->
-    <div id="packet-layer" class="packet-layer"></div>
-
   </div>
   <script src="app.js"></script>
 </body>

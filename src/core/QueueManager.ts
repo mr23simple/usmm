@@ -1,12 +1,16 @@
 import PQueue from 'p-queue';
 import { WorkloadPriority } from '../types/index.js';
+import { config } from '../config.js';
 
 export class QueueManager {
+  // Global shared queue to limit total CPU usage across all instances
+  private static globalGeneralQueue = new PQueue({ concurrency: config.GLOBAL_CONCURRENCY || 100 });
+  
   private queue: PQueue;
   private publishQueue: PQueue;
 
   constructor(concurrency: number = 3, publishRateLimit: number = 10) {
-    // General queue for non-publishing tasks (uploads, stats, etc)
+    // Instance-specific queue still exists but we'll prefer the global one for heavy lifting
     this.queue = new PQueue({ concurrency });
 
     // Specialized queue for publishing to ensure rate limits
@@ -26,7 +30,9 @@ export class QueueManager {
     priority: WorkloadPriority = WorkloadPriority.NORMAL,
     isPublishingTask: boolean = false
   ): Promise<T> {
-    const targetQueue = isPublishingTask ? this.publishQueue : this.queue;
+    // Publishing tasks are instance-specific (rate limits), 
+    // but general tasks (uploads, processing) hit the global concurrency limit
+    const targetQueue = isPublishingTask ? this.publishQueue : QueueManager.globalGeneralQueue;
     
     return targetQueue.add(task, { priority });
   }
@@ -34,8 +40,8 @@ export class QueueManager {
   get stats() {
     return {
       general: {
-        size: this.queue.size,
-        pending: this.queue.pending,
+        size: QueueManager.globalGeneralQueue.size,
+        pending: QueueManager.globalGeneralQueue.pending,
       },
       publish: {
         size: this.publishQueue.size,

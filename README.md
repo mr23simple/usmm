@@ -1,6 +1,6 @@
-# Unified Social Media Manager (USMM)
+# USMM | Spider Pipeline
 
-USMM is a high-performance, multi-tenant gateway designed to centralize and optimize social media interactions. It provides a standardized interface for posting content, managing media, and monitoring activity across multiple platforms like Facebook and (soon) X/Twitter.
+USMM is a high-performance, multi-tenant gateway designed to centralize and optimize social media interactions. It provides a standardized interface for posting content, managing media, and monitoring activity through an elegant, real-time "Red Spider Lily" visualization.
 
 **Production Endpoint:** `https://usmm.global-desk.top`
 **Live Monitor:** `https://usmm.global-desk.top`
@@ -161,11 +161,12 @@ You can simulate any request without hitting the underlying platform API by addi
 ---
 
 ## 📡 Real-Time Monitoring
-Visit the root URL (`https://usmm.global-desk.top`) to view the **Neural Flower Pipeline**.
-*   **Flower Visualization**: Data enters via the **Stem** (bottom-center) and travels to the **USMM Core**.
-*   **Petal Nodes**: Individual Social Media projects float around the core as "petals," each with a unique neon identity.
-*   **Physics-Engine**: Nodes utilize a force-directed layout to avoid the stem path and bounce off each other, supporting **100+ concurrent projects**.
-*   **Live Tracking**: Data packets follow the real-time movement of tethered nodes, ensuring no data is "lost" visually during high-concurrency stress.
+Visit the root URL (`https://usmm.global-desk.top`) to view the **Spider Pipeline**.
+*   **Red Spider Lily Visualization**: Data enters via the **Stem** (bottom-center) and travels to the **USMM Core** (The Flower Heart).
+*   **Spirit Orbs**: Incoming data is transformed into "Spirit Orbs" that traverse the flower's structure.
+*   **Spider Filaments (Pistils)**: Individual Social Media projects are represented by delicate, swaying pistils. When data reaches the end of a pistil, it "shatters" into an ethereal particle effect and floats upward, revealing the brand's logo within the orb.
+*   **Physics-Engine**: Supports **100 concurrent project filaments** with procedural swaying and organic "scoop" Bezier paths.
+*   **Live Tracking**: The UI maintains a 1:1 mapping between data packets and their target filaments, even as they sway and regenerate.
 
 ---
 
@@ -174,7 +175,9 @@ Visit the root URL (`https://usmm.global-desk.top`) to view the **Neural Flower 
     *   **Tenant-Aware Rate Limiting**: Requests are limited by a combined key of `Sender IP + x-platform-id`. This prevents distributed spam against specific accounts.
     *   **Stateless Architecture**: No user database required; credentials are interpreted in-flight and never stored.
 *   **Multi-Tenant Isolation**: Every unique project receives a dedicated service instance and private priority queue.
-*   **Concurrency**: Optimized for handling **100+ unique project queues** simultaneously.
+*   **Resource Management**: 
+    *   **Global Concurrency Cap**: Processing is strictly limited to **100 concurrent tasks** across all instances to ensure system stability and low CPU overhead.
+    *   **UI Optimization**: The Spider Pipeline UI is rendered on a high-performance canvas, efficiently handling 100+ simultaneous animations.
 *   **Priority System**: 
     *   `10` (Critical): Immediate processing.
     *   `5` (High): Elevated queue position.
@@ -190,7 +193,7 @@ Visit the root URL (`https://usmm.global-desk.top`) to view the **Neural Flower 
 The system includes simulation scripts to verify high-concurrency handling and UI performance.
 *   **Unit Tests**: `pnpm test` (Basic API validation).
 *   **Load Test**: `pnpm vitest run tests/load.test.ts` (Simulates 15 concurrent requests).
-*   **Live Simulation**: `node tests/live_simulation.js` (Dispatches requests for **100+ concurrent projects** over a 30s window to stress-test the Neural Flower UI).
+*   **Live Simulation**: `node tests/live_simulation.js` (Dispatches requests for **100 concurrent projects** over a 30s window to stress-test the Spider Pipeline UI).
 
 ---
 

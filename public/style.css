@@ -10,7 +10,7 @@
 
 body {
   margin: 0;
-  background-color: var(--bg-dark);
+  background-color: #000;
   font-family: 'Tilt Neon', sans-serif;
   color: #f8fafc;
   overflow: hidden; /* Prevent scrolling */
@@ -23,11 +23,60 @@ body {
   position: relative;
   width: 100%;
   height: 100%;
-  background: radial-gradient(circle at center, #0f172a 0%, #020617 70%);
+  background: #000;
   overflow: hidden;
 }
 
-/* ... existing nodes-layer and dock styles ... */
+#lily-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  z-index: 5;
+}
+
+.hub-wrapper {
+  position: absolute;
+  left: 50%;
+  top: 80%; /* Moved lower */
+  transform: translate(-50%, -50%);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.usmm-core-container {
+  width: 90px;
+  height: 90px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  transition: filter 0.3s ease;
+}
+
+.usmm-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 15px rgba(255, 40, 40, 0.5));
+  transition: transform 0.3s ease;
+}
+
+.active-core .usmm-logo {
+  animation: coreRotate 8s infinite linear;
+}
+
+@keyframes coreRotate {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.1); }
+  100% { transform: rotate(360deg) scale(1); }
+}
 
 .dock {
   position: absolute;
@@ -43,115 +92,8 @@ body {
   transition: opacity 0.5s ease-out;
   animation: fadeIn 0.5s ease-out;
   transform: translate(-50%, -50%); 
-  z-index: 20;
-  will-change: left, top; /* Performance optimization */
-}
-
-/* Mobile Adjustments */
-@media (max-width: 600px) {
-  .dock {
-    width: 30px;
-    height: 30px;
-  }
-  .dock img {
-    width: 24px;
-    height: 24px;
-  }
-  .usmm-core {
-    width: 100px;
-    height: 86px;
-  }
-  .core-layer-1 { width: 96px; height: 82px; }
-  .core-layer-2 { width: 90px; height: 78px; }
-  .core-inner {
-    width: 86px;
-    height: 74px;
-    font-size: 1.2rem;
-  }
-  .hub-status {
-    font-size: 0.5rem;
-    width: 200px;
-    bottom: -30px;
-  }
-}
-
-/* ... existing hub-wrapper and core styles ... */
-
-.dock img {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.dock-glow {
-  position: absolute;
-  top: -4px; left: -4px; right: -4px; bottom: -4px;
-  border-radius: 50%;
-  border: 1px solid var(--neon-yellow);
-  opacity: 0.4;
-}
-
-/* Centered Hub */
-.hub-wrapper.centered-hub {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 30;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-
-.usmm-core {
-  width: 140px;
-  height: 121px;
-  background: var(--neon-pink);
-  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-  filter: drop-shadow(0 0 10px var(--neon-pink));
-  transition: filter 0.3s ease;
-}
-
-.core-layer-1 {
-  width: 136px; 
-  height: 117px;
-  background: var(--bg-dark); 
-  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.core-layer-2 {
-  width: 128px; 
-  height: 110px;
-  background: var(--neon-pink);
-  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.core-inner {
-  width: 124px;
-  height: 106px;
-  background: var(--bg-dark);
-  clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 10;
-  color: var(--usmm-blue);
-  font-size: 1.8rem;
-  font-weight: bold;
-  text-shadow: 0 0 15px var(--usmm-blue);
-  letter-spacing: 2px;
+  z-index: 25;
+  will-change: left, top;
 }
 
 .core-ring {
@@ -189,7 +131,12 @@ body {
   fill: none;
   stroke-width: 1;
   opacity: 0.3;
-  transition: stroke 0.3s ease;
+  transition: stroke 0.3s ease, opacity 0.3s ease;
+}
+
+.background-wire {
+  stroke-width: 0.8;
+  filter: blur(0.5px);
 }
 
 /* Packets */
@@ -232,25 +179,6 @@ body {
 
 .packet-label {
   display: none; /* Hide for density */
-}
-
-.active-core {
-  animation: coreProcess 3s infinite linear;
-}
-
-.active-core .core-inner {
-  animation: counterRotate 3s infinite linear;
-}
-
-@keyframes coreProcess {
-  0% { transform: rotate(0deg) scale(1); }
-  50% { transform: rotate(180deg) scale(1.1); }
-  100% { transform: rotate(360deg) scale(1); }
-}
-
-@keyframes counterRotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(-360deg); }
 }
 
 @keyframes fadeIn {
