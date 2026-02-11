@@ -54,24 +54,32 @@ class Particle {
         this.y = y;
         this.color = color;
         this.life = 1.0;
-        this.decay = 0.005 + Math.random() * 0.01;
-        this.vx = (Math.random() - 0.5) * 0.5;
-        this.vy = -0.2 - Math.random() * 0.5;
+        this.decay = 0.005 + Math.random() * 0.015; 
+        this.vx = (Math.random() - 0.5) * 1.5; 
+        this.vy = -0.5 - Math.random() * 1.5; 
+        this.size = 0.5 + Math.random() * 2.5; 
     }
 
     update() {
         this.x += this.vx;
         this.y += this.vy;
+        this.vx *= 0.95; 
         this.life -= this.decay;
     }
 
     draw(ctx) {
+        ctx.save();
         ctx.globalAlpha = Math.max(0, this.life);
         ctx.fillStyle = this.color;
+        
+        ctx.shadowBlur = this.size * 2;
+        ctx.shadowColor = this.color;
+        
         ctx.beginPath();
-        ctx.arc(this.x, this.y, 1.5, 0, Math.PI * 2);
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
         ctx.fill();
-        ctx.globalAlpha = 1.0;
+        
+        ctx.restore();
     }
 }
 
@@ -266,10 +274,13 @@ class SpiritOrb {
         this.state = 'WAITING'; 
         this.x = 0;
         this.y = 0;
-        this.radius = 3; 
+        this.radius = 5; // CHANGE: Smaller initial size (was 3)
         this.timer = 0;
         this.finished = false; 
         
+        this.pulseOffset = Math.random() * 10000;
+        this.pulseSpeed = 0.003 + Math.random() * 0.008;
+
         this.waitDuration = 200; 
         this.stemDuration = 1000;
         this.pedicelDuration = 600; 
@@ -360,7 +371,8 @@ class SpiritOrb {
         }
         else if (this.state === 'FLOAT') {
             this.timer += 16;
-            if (this.radius < 10) this.radius += 0.1; 
+            // CHANGE: Reduced max growth size (5.5) and growth rate (0.05)
+            if (this.radius < 5.5) this.radius += 0.05; 
             this.y -= 0.8; 
             this.x += Math.sin(this.timer * 0.002 + this.floatPhase) * 0.3;
             
@@ -370,18 +382,32 @@ class SpiritOrb {
 
     draw(ctx) {
         ctx.save();
-        const pulse = 1 + Math.sin(Date.now() * 0.01) * 0.2;
-        const glowRadius = this.radius * (this.state === 'FLOAT' ? 2 : 4) * pulse;
+        
+        const time = Date.now();
+        const pulse = 1 + Math.sin(time * this.pulseSpeed + this.pulseOffset) * 0.2;
+        
+        // CHANGE: Reduced glow multiplier to make it less intense
+        const glowRadius = this.radius * (this.state === 'FLOAT' ? 2.5 : 3.5) * pulse;
 
         const grad = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, glowRadius);
         grad.addColorStop(0, this.color);
-        grad.addColorStop(0.4, this.color + '80');
+        // CHANGE: Significantly reduced opacity at the mid-point (was 0.4 or 1.0)
+        grad.addColorStop(0.5, this.color + '33'); // ~20% opacity
         grad.addColorStop(1, 'rgba(0,0,0,0)');
+        
+        ctx.globalCompositeOperation = 'screen';
         
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(this.x, this.y, glowRadius, 0, Math.PI * 2);
         ctx.fill();
+
+        // CHANGE: Reduced white center size to 0.4x radius
+        const coreRadius = this.radius * 0.4; 
+        
+        ctx.shadowBlur = 10; 
+        ctx.shadowColor = '#ffffff';
+        ctx.fillStyle = '#ffffff';
 
         if (this.state === 'FLOAT' && this.img && this.img.complete && this.img.naturalWidth !== 0) {
             ctx.beginPath();
@@ -389,9 +415,8 @@ class SpiritOrb {
             ctx.clip();
             ctx.drawImage(this.img, this.x - this.radius, this.y - this.radius, this.radius * 2, this.radius * 2);
         } else {
-            ctx.fillStyle = '#fff';
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.arc(this.x, this.y, coreRadius, 0, Math.PI * 2);
             ctx.fill();
         }
 
@@ -443,7 +468,7 @@ class Flower {
         this.heads = [];
         this.particles = [];
         this.orbs = new Map(); // requestId -> SpiritOrb
-        this.baseScale = width * 0.28;
+        this.baseScale = Math.min(width, height) * 0.22;
         
         this.initHeads();
     }
@@ -525,7 +550,7 @@ class Flower {
         
         const stemBaseX = width / 2;
         const stemBaseY = height;
-        const stemTipY = height * 0.7; // Lowered to 0.7 for better headroom in 3:4 ratio
+        const stemTipY = height * 0.6; // Maintained 60% position
 
         this.heads.forEach(h => h.updatePos(stemBaseX, stemTipY));
         this.heads.forEach(h => {
@@ -615,30 +640,23 @@ class Flower {
 // --- Functions ---
 
 function resize() {
-    const containerWidth = container.clientWidth;
-    const containerHeight = container.clientHeight;
-    const targetRatio = 0.75; // 3:4 ratio
-
-    if (containerWidth / containerHeight > targetRatio) {
-        // Window is wider than 3:4
-        height = containerHeight;
-        width = height * targetRatio;
-    } else {
-        // Window is taller than 3:4
-        width = containerWidth;
-        height = width / targetRatio;
-    }
+    width = container.clientWidth;
+    height = container.clientHeight;
 
     canvas.width = width;
     canvas.height = height;
-    canvas.style.width = width + 'px';
-    canvas.style.height = height + 'px';
     
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
+    
+    const newBaseScale = Math.min(width, height) * 0.22;
+
     if (flower) {
-        flower.baseScale = width * 0.28; // Reduced scale slightly to ensure clearance
+        flower.baseScale = newBaseScale;
         flower.initHeads();
     } else {
         flower = new Flower();
+        flower.baseScale = newBaseScale;
     }
 }
 
