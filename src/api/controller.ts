@@ -15,6 +15,9 @@ export class SocialMediaController {
   private static async validateMedia(files: Express.Multer.File[]): Promise<{ valid: boolean, error?: string }> {
     for (const file of files) {
       if (file.mimetype.startsWith('image/')) {
+        if (file.size > 10 * 1024 * 1024) { // 10MB limit for images
+          return { valid: false, error: `Image '${file.originalname}' exceeds 10MB limit.` };
+        }
         try {
           const image = sharp(file.buffer);
           const metadata = await image.metadata();
@@ -27,6 +30,9 @@ export class SocialMediaController {
         }
       } else if (file.mimetype.startsWith('video/')) {
         if (file.size === 0) return { valid: false, error: `Video file is empty.` };
+        if (file.size > 100 * 1024 * 1024) { // 100MB limit for videos
+          return { valid: false, error: `Video '${file.originalname}' exceeds 100MB limit.` };
+        }
       } else {
         return { valid: false, error: `Unsupported file type: ${file.mimetype}` };
       }

@@ -157,7 +157,11 @@ export class SocialMediaService {
         const results: FISResponse[] = [];
 
         if (validated.options?.publishToFeed !== false) {
-          const res = await this.getClient().createFeedPost(processedCaption, mediaIds);
+          const mediaObjects = mediaIds.map((id, idx) => ({ 
+            id, 
+            type: validated.media?.[idx]?.type || 'image' 
+          }));
+          const res = await this.getClient().createFeedPost(processedCaption, mediaObjects);
           results.push(res);
           if (res.success) {
             logger.info('Post published successfully', { 

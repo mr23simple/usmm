@@ -94,12 +94,12 @@ export class TwitterClient {
     return { valid: true, name: isMock ? 'Mock X User' : 'X Account (Structural Check)' };
   }
 
-  async createFeedPost(caption: string, mediaIds?: string[]): Promise<FISResponse> {
+  async createFeedPost(caption: string, media?: { id: string, type: 'image' | 'video' }[]): Promise<FISResponse> {
     try {
       const tweetData: any = { text: caption };
       
-      if (mediaIds && mediaIds.length > 0) {
-        tweetData.media = { media_ids: mediaIds };
+      if (media && media.length > 0) {
+        tweetData.media = { media_ids: media.map(m => m.id) };
       }
 
       const response = await this.api.v2.tweet(tweetData);

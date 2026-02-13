@@ -18,14 +18,20 @@ export class FacebookClient {
 
   async uploadMedia(asset: MediaAsset): Promise<string> {
     const isVideo = asset.type === 'video';
-    const endpoint = `/${this.pageId}/${isVideo ? 'videos' : 'photos'}`;
+    // Videos use a dedicated subdomain and we use v24.0 for everything
+    const baseUrl = isVideo ? 'https://graph-video.facebook.com/v24.0' : 'https://graph.facebook.com/v24.0';
+    const endpoint = `${baseUrl}/${this.pageId}/${isVideo ? 'videos' : 'photos'}`;
     const textParam = isVideo ? 'description' : 'caption';
+    const accessToken = (this.api.defaults.params as any)?.access_token;
     
     const form = new FormData();
     
+    // access_token MUST be in the form body for graph-video uploads
+    if (accessToken) form.append('access_token', accessToken);
+
     if (asset.source instanceof Buffer) {
       const filename = isVideo ? 'upload.mp4' : 'upload.png';
-      form.append(isVideo ? 'source' : 'source', asset.source, { filename });
+      form.append('source', asset.source, { filename });
     } else {
       form.append(isVideo ? 'file_url' : 'url', asset.source);
     }
@@ -33,20 +39,42 @@ export class FacebookClient {
     form.append('published', 'false');
     if (asset.altText) form.append(textParam, asset.altText);
 
-    const response = await this.api.post(endpoint, form, {
+    const response = await axios.post(endpoint, form, {
       headers: form.getHeaders(),
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      proxy: false
     });
 
     return response.data.id;
   }
 
-  async createFeedPost(caption: string, mediaIds?: string[]): Promise<FISResponse> {
+  async createFeedPost(caption: string, media?: { id: string, type: 'image' | 'video' }[]): Promise<FISResponse> {
     try {
+      const hasVideo = media?.some(m => m.type === 'video');
+      const videoId = media?.find(m => m.type === 'video')?.id;
+
+      if (hasVideo && videoId) {
+        // Videos MUST be published via the video node or /videos endpoint
+        // To publish an unpublished video, we POST to the video ID itself
+        const response = await this.api.post(`/${videoId}`, null, {
+          params: { 
+            description: caption,
+            published: true 
+          }
+        });
+        return {
+          success: true,
+          postId: response.data.id || videoId,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      // Standard Photo/Text Feed Post
       const params: any = { message: caption };
-      
-      if (mediaIds && mediaIds.length > 0) {
+      if (media && media.length > 0) {
         params.attached_media = JSON.stringify(
-          mediaIds.map(id => ({ media_fbid: id }))
+          media.map(m => ({ media_fbid: m.id }))
         );
       }
 
@@ -101,7 +129,7 @@ export class FacebookClient {
     return `https://graph.facebook.com/${this.pageId}/picture?type=large`;
   }
 
-  async validateToken(): Promise<{ valid: boolean; name?: string; error?: string }> {
+  async validateToken(forceRealCheck: boolean = false): Promise<{ valid: boolean; name?: string; error?: string }> {
     try {
       // Allow 'mock' token to bypass real check for testing/dryRun
       const token = (this.api.defaults.params as any)?.access_token;

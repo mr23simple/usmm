@@ -117,9 +117,10 @@ Basic service health check and uptime information.
 
 ### 3. Media Processing
 When using `multipart/form-data`, attach your image/video files to the `media` field.
-*   **File Limit**: 1MB per file.
-*   **Max Resolution**: 3000x3000px.
-*   **Auto-Optimization**: USMM automatically strips metadata and applies high-quality compression to ensure optimal delivery and privacy.
+*   **Image Limit**: 10MB per file.
+*   **Video Limit**: 100MB per file.
+*   **Max Resolution**: 3000x3000px (Images).
+*   **Auto-Optimization**: USMM automatically strips metadata and applies high-quality compression to images to ensure optimal delivery and privacy.
 
 ---
 

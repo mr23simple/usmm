@@ -19,7 +19,7 @@ const io = new SocketIOServer(httpServer);
 const upload = multer({ 
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 1024 * 1024, // 1MB limit
+    fileSize: 100 * 1024 * 1024, // 100MB overall limit (enforced more strictly in controller)
   }
 });
 
@@ -125,7 +125,7 @@ app.get('/v1/stats', SocialMediaController.getStats);
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(400).json({ success: false, error: 'File too large. Maximum size is 1MB per image.' });
+      return res.status(400).json({ success: false, error: 'File too large. Maximum size is 100MB.' });
     }
   }
   next(err);
