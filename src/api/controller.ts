@@ -53,11 +53,25 @@ export class SocialMediaController {
   }
 
   private static getService(req: Request, platform: 'fb' | 'x' | 'slack', isDryRun: boolean): { service: any, error?: string } {
-    let pageId = (req.headers['x-platform-id'] || req.headers['x-fb-page-id'] || config.FB_PAGE_ID) as string;
-    const token = (req.headers['x-platform-token'] || req.headers['x-fb-token'] || config.FB_PAGE_ACCESS_TOKEN) as string;
+    // 1. Try platform-specific headers (e.g., x-fb-id, x-slack-token)
+    // 2. Fall back to generic x-platform-* headers
+    // 3. Fall back to legacy x-fb-* headers or config defaults
+    let pageId = (
+      req.headers[`x-${platform}-id`] || 
+      req.headers['x-platform-id'] || 
+      req.headers['x-fb-page-id'] || 
+      (platform === 'fb' ? config.FB_PAGE_ID : undefined)
+    ) as string;
 
-    // Auto-ID: Default to platform name if ID is missing
-    if (!pageId) {
+    const token = (
+      req.headers[`x-${platform}-token`] || 
+      req.headers['x-platform-token'] || 
+      req.headers['x-fb-token'] || 
+      (platform === 'fb' ? config.FB_PAGE_ACCESS_TOKEN : undefined)
+    ) as string;
+
+    // Auto-ID: Default to platform name if ID is missing (only for Slack and X)
+    if (!pageId && platform !== 'fb') {
       pageId = platform;
     }
 

@@ -170,12 +170,23 @@ describe('USMM API Endpoints', () => {
                                 options: { dryRun: true }
                               });
                             expect(res.status).toBe(200);
-                            expect(res.body.success).toBe(true);
-                          });
-                      
-                          it('POST /v1/fb/post/:id/update should work for dryRun', async () => {
-                      
-                          const res = await request(app)
+                                  expect(res.body.success).toBe(true);
+                                });
+                            
+                                it('POST /v1/slack/post should work with x-slack-token header', async () => {
+                                  const res = await request(app)
+                                    .post('/v1/slack/post')
+                                    .set('x-slack-token', 'https://hooks.slack.com/services/SPECIFIC/HEADER')
+                                    .send({
+                                      caption: 'Platform-specific header test',
+                                      options: { dryRun: true }
+                                    });
+                                  expect(res.status).toBe(200);
+                                  expect(res.body.success).toBe(true);
+                                });
+                            
+                                it('POST /v1/fb/post/:id/update should work for dryRun', async () => {
+                                                      const res = await request(app)
             .post('/v1/fb/post/123/update')
             .set('x-platform-id', '12345')
             .set('x-platform-token', 'mock')

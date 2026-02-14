@@ -12,12 +12,20 @@ USMM is a high-performance, multi-tenant gateway designed to centralize and opti
 USMM operates as a secure proxy. You can target specific accounts/pages by providing their credentials in the request headers.
 
 ### 1. Request Headers
-To target a specific social media account, include these headers in your request.
+To target a specific social media account, include these headers in your request. USMM supports both **platform-specific** (recommended) and **generic** headers.
 
+#### Recommended (Specialized)
+| Platform | ID Header | Token Header |
+| :--- | :--- | :--- |
+| **Facebook** | `x-fb-id` (Page ID) | `x-fb-token` (Access Token) |
+| **X (Twitter)** | `x-x-id` (Optional) | `x-x-token` (JSON/Base64 Keys) |
+| **Slack** | `x-slack-id` (Optional) | `x-slack-token` (Webhook URL) |
+
+#### Generic (Legacy/Router)
 | Header | Description |
 | :--- | :--- |
-| `x-platform-id` | The unique ID of the target Page/Account (e.g. Facebook Page ID). *Optional for specialized routes (defaults to the platform name).* |
-| `x-platform-token` | The authentication secret. Format varies by platform (see below). |
+| `x-platform-id` | The unique ID of the target Page/Account. |
+| `x-platform-token` | The authentication secret. |
 
 #### Authentication Schemas
 USMM uses an **Adaptive Token Strategy** to support diverse platform requirements while remaining a stateless proxy. The content of the `x-platform-token` header is interpreted based on the `platform` parameter:
