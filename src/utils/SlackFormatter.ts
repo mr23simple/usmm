@@ -1,26 +1,16 @@
 export class SlackFormatter {
   static parse(caption: string, media?: { id: string, type: 'image' | 'video' }[]): any[] {
-    // 1. Pre-process inline tags (Bold, Italic, Code, Br, and non-button Links)
-    let processed = caption;
-
-    // Handle escaped quotes commonly found in CURL/JSON payloads
-    processed = processed.replace(/\\"/g, '"').replace(/\\'/g, "'");
-
-    // Convert standard <a> to Slack link (if it doesn't have btn class)
-    processed = processed.replace(/<a\s+(?![^>]*class=["']btn)(?:[^>]*?)href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, '<$1|$2>');
-
-    // Convert <b>, <i>, <code>, <br>
-    processed = processed.replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, '*$1*')
-      .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '*$1*')
-      .replace(/<i[^>]*>([\s\S]*?)<\/i>/gi, '_$1_')
-      .replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '_$1_')
-      .replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`');
-
-    // 2. Identify and Process Structural Blocks
     const blocks: any[] = [];
-    let text = processed.trim();
+    let text = caption;
     let currentActions: any[] = [];
+    let currentMrkdwn = '';
+
+    const flushMrkdwn = () => {
+      if (currentMrkdwn.trim()) {
+        this.pushSmartSections(blocks, currentMrkdwn.trim());
+        currentMrkdwn = '';
+      }
+    };
 
     const flushActions = () => {
       if (currentActions.length > 0) {
@@ -29,76 +19,100 @@ export class SlackFormatter {
       }
     };
 
-    while (text.length > 0) {
-      const match = /<(div|a|hr|img|select|input|ul)\s*([^>]*?)>/i.exec(text);
+    const flushAll = () => { flushMrkdwn(); flushActions(); };
 
-      if (!match) {
-        flushActions();
-        if (text.trim()) blocks.push(this.createSection(this.cleanupTags(text.trim())));
+    while (text.length > 0) {
+      const startMatch = /<(div|a|hr|img|select|input|ul|br)\s*([^>]*?)>/i.exec(text);
+
+      if (!startMatch) {
+        currentMrkdwn += this.toMarkdown(text);
+        text = '';
         break;
       }
 
-      const before = text.substring(0, match.index).trim();
-      if (before) {
-        flushActions();
-        blocks.push(this.createSection(this.cleanupTags(before)));
-      }
+      const before = text.substring(0, startMatch.index);
+      currentMrkdwn += this.toMarkdown(before);
 
-      const tag = match[1].toLowerCase();
-      const attrs = this.parseAttributes(match[2]);
+      const tag = startMatch[1].toLowerCase();
+      const attrs = this.parseAttributes(startMatch[2]);
       const className = attrs.class || '';
 
       let content = '';
-      let fullTagLength = match[0].length;
+      let fullTagLength = startMatch[0].length;
 
       if (['div', 'a', 'select', 'ul'].includes(tag)) {
-        const closeIndex = this.findMatchingCloseTag(text, match.index, tag);
+        const closeIndex = this.findMatchingCloseTag(text, startMatch.index, tag);
         if (closeIndex !== -1) {
-          content = text.substring(match.index + match[0].length, closeIndex).trim();
-          fullTagLength = (closeIndex + `</${tag}>`.length) - match.index;
+          content = text.substring(startMatch.index + startMatch[0].length, closeIndex);
+          fullTagLength = (closeIndex + `</${tag}>`.length) - startMatch.index;
         }
       }
 
-      if (tag === 'a' && (className.includes('btn') || attrs.value || attrs.action_id)) {
+      const isButton = tag === 'a' && (className.includes('btn') || attrs.value);
+      const isBlock = ['div', 'hr', 'ul', 'select', 'input'].includes(tag) || (tag === 'img' && !content);
+
+      if (isButton) {
+        flushMrkdwn();
         const style = className.includes('danger') ? 'danger' : (className.includes('primary') ? 'primary' : undefined);
-        currentActions.push(this.createButton(this.cleanupTags(content), attrs.href || '#', style, attrs.value || attrs.action_id));
-      } else {
-        flushActions();
+        currentActions.push(this.createButton(this.toMarkdown(content).trim(), attrs.href || '#', style, attrs.value));
+      } else if (isBlock) {
+        flushAll();
+        const trimmedContent = content.trim();
         if (tag === 'div') {
-          if (className === 'section') blocks.push(this.parseComplexSection(content));
-          else if (className === 'header') blocks.push(this.createHeader(this.cleanupTags(content)));
-          else if (className === 'context') blocks.push(this.parseContext(content));
+          if (className === 'section') blocks.push(this.parseComplexSection(trimmedContent));
+          else if (className === 'header') blocks.push(this.createHeader(trimmedContent));
+          else if (className === 'context') blocks.push(this.parseContext(trimmedContent));
           else if (className === 'divider') blocks.push({ type: 'divider' });
-          else blocks.push(this.createSection(this.cleanupTags(content)));
-        } else if (tag === 'ul') {
-          blocks.push(this.createRichTextList(content));
-        } else if (tag === 'hr') {
-          blocks.push({ type: 'divider' });
-        } else if (tag === 'img') {
-          blocks.push(this.createImage(attrs.src || '', attrs.title, attrs.alt));
-        } else if (tag === 'select') {
-          blocks.push({ type: 'actions', elements: [this.createSelect(content, attrs.placeholder, className.includes('overflow'), attrs.multiple !== undefined)] });
-        } else if (tag === 'input') {
+          else this.pushSmartSections(blocks, this.toMarkdown(trimmedContent));
+        } else if (tag === 'ul') blocks.push(this.createRichTextList(trimmedContent));
+        else if (tag === 'hr') blocks.push({ type: 'divider' });
+        else if (tag === 'img') blocks.push(this.createImage(attrs.src || '', attrs.title, attrs.alt));
+        else if (tag === 'select') blocks.push({ type: 'actions', elements: [this.createSelect(trimmedContent, attrs.placeholder, className.includes('overflow'), attrs.multiple !== undefined)] });
+        else if (tag === 'input') {
           const picker: any = { placeholder: { type: 'plain_text', text: attrs.placeholder || 'Select' } };
           if (attrs.type === 'date') { picker.type = 'datepicker'; picker.initial_date = attrs.value; }
           else if (attrs.type === 'time') { picker.type = 'timepicker'; picker.initial_time = attrs.value; }
           blocks.push({ type: 'actions', elements: [picker] });
-        } else {
-          // Fallback: standard tag that survived pre-processing
-          blocks.push(this.createSection(this.cleanupTags(content || match[0])));
         }
+      } else {
+        if (tag === 'a') currentMrkdwn += `<${attrs.href || '#'}|${this.toMarkdown(content)}>`;
+        else if (tag === 'br') currentMrkdwn += '\n';
       }
 
-      text = text.substring(match.index + fullTagLength).trim();
+      text = text.substring(startMatch.index + fullTagLength);
     }
 
-    flushActions();
-
-    if (media && media.length > 0) {
-      media.forEach(m => { if (m.type === 'image') blocks.push(this.createImage(m.id)); });
-    }
-
+    flushAll();
+    if (media && media.length > 0) media.forEach(m => { if (m.type === 'image') blocks.push(this.createImage(m.id)); });
     return blocks.length > 0 ? blocks : [this.createSection('Empty message')];
+  }
+
+  /**
+   * Pushes one or more sections depending on text length to respect Slack's 3000 char limit.
+   */
+  private static pushSmartSections(blocks: any[], markdown: string) {
+    if (markdown.length <= 3000) {
+      blocks.push(this.createSection(markdown));
+      return;
+    }
+
+    // Split logic: find nearest newline before 3000 limit to maintain readability
+    let remaining = markdown;
+    while (remaining.length > 0) {
+      if (remaining.length <= 3000) {
+        blocks.push(this.createSection(remaining));
+        break;
+      }
+
+      let chunk = remaining.substring(0, 3000);
+      let splitIndex = chunk.lastIndexOf('\n');
+      
+      // If no newline found, split at 3000 chars
+      if (splitIndex === -1 || splitIndex < 2000) splitIndex = 3000;
+
+      blocks.push(this.createSection(remaining.substring(0, splitIndex).trim()));
+      remaining = remaining.substring(splitIndex).trim();
+    }
   }
 
   private static findMatchingCloseTag(text: string, startIndex: number, tag: string): number {
@@ -115,7 +129,7 @@ export class SlackFormatter {
   private static parseComplexSection(content: string) {
     const section: any = { type: 'section' }; const fields: any[] = []; let accessory: any = null;
     let text = content.replace(/<div\s+class=["']field["']\s*>([\s\S]*?)<\/div>/gi, (_, c) => {
-      fields.push({ type: 'mrkdwn', text: this.cleanupTags(c.trim()) }); return '';
+      fields.push({ type: 'mrkdwn', text: this.toMarkdown(c.trim()).substring(0, 2000) }); return ''; // Fields have a smaller 2000 limit
     });
     text = text.replace(/<select\s*([^>]*?)>([\s\S]*?)<\/select>/gi, (_, attrStr, inner) => {
       const attrs = this.parseAttributes(attrStr);
@@ -124,8 +138,11 @@ export class SlackFormatter {
     text = text.replace(/<img\s*([^>]*?)\s*\/?>/gi, (_, attrStr) => {
       const attrs = this.parseAttributes(attrStr); accessory = { type: 'image', image_url: attrs.src, alt_text: attrs.alt || 'image' }; return '';
     });
-    text = this.cleanupTags(text.trim());
-    if (text) section.text = { type: 'mrkdwn', text };
+    text = text.replace(/<a\s*([^>]*?)\s*>([\s\S]*?)<\/a>/gi, (_, attrStr, c) => {
+      const attrs = this.parseAttributes(attrStr); return `<${attrs.href || '#'}|${this.toMarkdown(c.trim())}>`;
+    });
+    text = this.toMarkdown(text.trim());
+    if (text) section.text = { type: 'mrkdwn', text: text.substring(0, 3000) };
     if (fields.length > 0) section.fields = fields;
     if (accessory) section.accessory = accessory;
     return section;
@@ -136,8 +153,8 @@ export class SlackFormatter {
     let text = content.replace(/<img\s*([^>]*?)\s*\/?>/gi, (_, attrStr) => {
       const attrs = this.parseAttributes(attrStr); elements.push({ type: 'image', image_url: attrs.src, alt_text: attrs.alt || 'icon' }); return '';
     });
-    const remaining = this.cleanupTags(text.trim());
-    if (remaining) elements.push({ type: 'mrkdwn', text: remaining });
+    const remaining = this.toMarkdown(text.trim());
+    if (remaining) elements.push({ type: 'mrkdwn', text: remaining.substring(0, 3000) });
     return { type: 'context', elements };
   }
 
@@ -146,7 +163,7 @@ export class SlackFormatter {
     const liRegex = /<li>([\s\S]*?)<\/li>/gi;
     let m;
     while ((m = liRegex.exec(content)) !== null) {
-      elements.push({ type: 'rich_text_section', elements: [{ type: 'text', text: this.cleanupTags(m[1].trim()).replace(/\*/g, '').replace(/_/g, '') }] });
+      elements.push({ type: 'rich_text_section', elements: [{ type: 'text', text: this.toMarkdown(m[1].trim()).replace(/\*/g, '') }] });
     }
     return { type: 'rich_text', elements: [{ type: 'rich_text_list', style: 'bullet', indent: 0, elements }] };
   }
@@ -157,14 +174,14 @@ export class SlackFormatter {
     let m;
     while ((m = optionRegex.exec(inner)) !== null) {
       const attrs = this.parseAttributes(m[1]);
-      const opt: any = { text: { type: 'plain_text', text: m[2].trim() }, value: attrs.value || '' };
+      const opt: any = { text: { type: 'plain_text', text: m[2].trim().substring(0, 75) }, value: (attrs.value || '').substring(0, 75) };
       if (attrs.class?.includes('danger')) opt.style = 'danger';
       options.push(opt);
     }
     if (isOverflow) return { type: 'overflow', options };
     return {
       type: isMulti ? 'multi_static_select' : 'static_select',
-      placeholder: { type: 'plain_text', text: placeholder || 'Select' },
+      placeholder: { type: 'plain_text', text: (placeholder || 'Select').substring(0, 75) },
       options
     };
   }
@@ -180,15 +197,16 @@ export class SlackFormatter {
     return attrs;
   }
 
-  private static cleanupTags(text: string): string {
-    // Strip any remaining unknown/malformed HTML tags, but preserve Slack's <url|text> and <@user> syntax
-    return text.replace(/<(?!http|https|!|#)[^>]*>/g, '');
+  private static toMarkdown(text: string): string {
+    return text.replace(/<br\s*\/?>/gi, '\n').replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, '*$1*')
+      .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, '*$1*').replace(/<i[^>]*>([\s\S]*?)<\/i>/gi, '_$1_')
+      .replace(/<em[^>]*>([\s\S]*?)<\/em>/gi, '_$1_').replace(/<code[^>]*>([\s\S]*?)<\/code>/gi, '`$1`');
   }
 
   private static createHeader(text: string) { return { type: 'header', text: { type: 'plain_text', text: text.substring(0, 3000), emoji: true } }; }
-  private static createSection(markdown: string) { return { type: 'section', text: { type: 'mrkdwn', text: markdown.substring(0, 3000) } }; }
+  private static createSection(markdown: string) { return { type: 'section', text: { type: 'mrkdwn', text: markdown } }; }
   private static createImage(url: string, title?: string, alt?: string) {
-    const img: any = { type: 'image', image_url: url, alt_text: alt || title || 'image' };
+    const img: any = { type: 'image', image_url: url, alt_text: (alt || title || 'image').substring(0, 2000) };
     if (title) img.title = { type: 'plain_text', text: title.substring(0, 2000) };
     return img;
   }
@@ -197,11 +215,11 @@ export class SlackFormatter {
     const confirmMatch = /<confirm\s*([^>]*?)>([\s\S]*?)<\/confirm>/i.exec(content);
     if (confirmMatch) {
       const cAttrs = this.parseAttributes(confirmMatch[1]);
-      confirm = { title: { type: 'plain_text', text: cAttrs.title || 'Are you sure?' }, text: { type: 'plain_text', text: confirmMatch[2].trim() }, confirm: { type: 'plain_text', text: cAttrs.confirm || 'Yes' }, deny: { type: 'plain_text', text: cAttrs.deny || 'No' } };
+      confirm = { title: { type: 'plain_text', text: (cAttrs.title || 'Are you sure?').substring(0, 100) }, text: { type: 'plain_text', text: confirmMatch[2].trim().substring(0, 300) }, confirm: { type: 'plain_text', text: (cAttrs.confirm || 'Yes').substring(0, 30) }, deny: { type: 'plain_text', text: (cAttrs.deny || 'No').substring(0, 30) } };
       cleanText = content.replace(confirmMatch[0], '').trim();
     }
-    const btn: any = { type: 'button', text: { type: 'plain_text', text: cleanText.replace(/\*/g, '').replace(/_/g, ''), emoji: true } };
-    if (url && url !== '#') btn.url = url; if (style) btn.style = style; if (value) btn.value = value;
+    const btn: any = { type: 'button', text: { type: 'plain_text', text: this.toMarkdown(cleanText).replace(/\*/g, '').substring(0, 75), emoji: true } };
+    if (url && url !== '#') btn.url = url; if (style) btn.style = style; if (value) btn.value = value?.substring(0, 2000);
     if (confirm) btn.confirm = confirm;
     return btn;
   }

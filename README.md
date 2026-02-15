@@ -123,6 +123,14 @@ USMM includes a built-in framework that converts a simplified HTML/Tailwind-like
 | `<input type="time">` | `value="HH:mm"` | `timepicker` |
 | `<img>` | `src="..." title="..."` | `image` (Block or Accessory) |
 
+#### Interactive Logic
+*   **Confirmation Dialogs**: Wrap button text in `<confirm title="..." confirm="..." deny="...">Message</confirm>` to trigger a Slack confirmation popup.
+*   **Overflow Styles**: Use `<option class="danger">` inside an overflow menu for red-styled critical actions.
+
+#### Data Integrity
+*   **Smart Splitting**: Sections exceeding Slack's 3000-character limit are automatically split into multiple sequential blocks, preserving all data (ideal for long Gemini AI reports).
+*   **Boundary Protection**: USMM automatically enforces platform-specific hard-caps (e.g., 2000 chars for fields, 75 for buttons) to prevent payload rejection.
+
 #### Inline Markdown (Auto-converted)
 *   `<b>` / `<strong>` → `*bold*`
 *   `<i>` / `<em>` → `_italic_`
@@ -136,8 +144,7 @@ USMM includes a built-in framework that converts a simplified HTML/Tailwind-like
 When using `multipart/form-data`, attach your image/video files to the `media` field.
 *   **Image Limit**: 10MB per file.
 *   **Video Limit**: 100MB per file.
-*   **Max Resolution**: 3000x3000px (Images).
-*   **Auto-Optimization**: USMM automatically strips metadata and applies high-quality compression to images to ensure optimal delivery and privacy.
+*   **Auto-Optimization**: USMM automatically strips metadata, applies high-quality compression, and **automatically downscales images to 3000px** if they exceed platform limits, ensuring zero "Hard Fails" for high-res screenshots.
 *   **Protocol Compliance (v24.0)**: 
     *   **Photos**: Uploaded to `graph.facebook.com` and attached to feed via `media_fbid`.
     *   **Videos**: Uploaded via dedicated `graph-video.facebook.com` infrastructure. Feed publication is handled directly on the video node to ensure full compatibility with Page permissions.
@@ -211,7 +218,8 @@ Visit the root URL (`https://usmm.global-desk.top`) to view the **Spider Pipelin
 *   **API Versions**: 
     *   Facebook: Graph API v24.0
     *   X / Twitter: API v2 (Tweets) & v1.1 (Media)
-*   **Fail-Safe**: Automatic transition to text-only if media upload fails or is rejected.
+*   **Strict Validation**: USMM performs real-time metadata validation for images (resolution/integrity) and structural validation for multi-part auth tokens.
+*   **Fail-Safe**: Automatic transition to text-only if media upload fails or is rejected by the target platform.
 
 ---
 

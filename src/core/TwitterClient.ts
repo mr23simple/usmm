@@ -50,16 +50,16 @@ export class TwitterClient {
   async uploadMedia(asset: MediaAsset): Promise<string> {
     try {
       let mediaId: string;
+      const isVideo = asset.type === 'video';
+      const mimeType = asset.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg');
       
       if (asset.source instanceof Buffer) {
-        // Use provided mimeType or fall back to standard types
-        const mimeType = asset.mimeType || (asset.type === 'video' ? 'video/mp4' : 'image/jpeg');
-        
         mediaId = await this.api.v1.uploadMedia(asset.source, { mimeType });
       } else {
-        // twitter-api-v2 doesn't directly support URL upload in v1.1 simple upload
-        // We would need to fetch it first. For now, we assume Buffer (coming from USMM Multipart)
-        throw new Error('Twitter Client currently only supports Buffer-based media uploads.');
+        // Fetch URL source to Buffer first since twitter-api-v2 v1.1 upload needs it
+        const response = await axios.get(asset.source, { responseType: 'arraybuffer' });
+        const buffer = Buffer.from(response.data);
+        mediaId = await this.api.v1.uploadMedia(buffer, { mimeType });
       }
 
       return mediaId;

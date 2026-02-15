@@ -22,8 +22,14 @@ export class SocialMediaController {
           const image = sharp(file.buffer);
           const metadata = await image.metadata();
           if (!metadata.format) return { valid: false, error: `File '${file.originalname}' is not a valid image.` };
+          
+          // Log a warning for high-res images but allow them to proceed to optimization (auto-resize)
           if ((metadata.width && metadata.width > 3000) || (metadata.height && metadata.height > 3000)) {
-            return { valid: false, error: `Image resolution exceeds 3000x3000px limit.` };
+            logger.warn('High-resolution image detected, will be auto-resized during optimization', { 
+              file: file.originalname, 
+              width: metadata.width, 
+              height: metadata.height 
+            });
           }
         } catch (e) {
           return { valid: false, error: `File '${file.originalname}' is corrupted.` };
@@ -46,7 +52,12 @@ export class SocialMediaController {
   private static async optimizeMedia(file: Express.Multer.File): Promise<Buffer> {
     if (!file.mimetype.startsWith('image/')) return file.buffer;
     try {
-      return await sharp(file.buffer).rotate().jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+      // Automatic Downscaling: Resize to max 3000px if needed while maintaining aspect ratio
+      return await sharp(file.buffer)
+        .rotate()
+        .resize({ width: 3000, height: 3000, fit: 'inside', withoutEnlargement: true })
+        .jpeg({ quality: 90, mozjpeg: true })
+        .toBuffer();
     } catch (e) {
       return file.buffer;
     }
