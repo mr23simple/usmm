@@ -8,8 +8,7 @@
     "start": "tsx src/server.ts",
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "test": "vitest run",
-    "migrate": "tsx scripts/migrate-to-redis.ts"
+    "test": "vitest run"
   },
   "keywords": [],
   "author": "",
