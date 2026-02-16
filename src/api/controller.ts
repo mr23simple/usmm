@@ -24,7 +24,7 @@ export class SocialMediaController {
           if (!metadata.format) return { valid: false, error: `File '${file.originalname}' is not a valid image.` };
           
           // Log a warning for high-res images but allow them to proceed to optimization (auto-resize)
-          if ((metadata.width && metadata.width > 3000) || (metadata.height && metadata.height > 3000)) {
+          if ((metadata.width && metadata.width > 2048) || (metadata.height && metadata.height > 2048)) {
             logger.warn('High-resolution image detected, will be auto-resized during optimization', { 
               file: file.originalname, 
               width: metadata.width, 
@@ -52,10 +52,10 @@ export class SocialMediaController {
   private static async optimizeMedia(file: Express.Multer.File): Promise<Buffer> {
     if (!file.mimetype.startsWith('image/')) return file.buffer;
     try {
-      // Automatic Downscaling: Resize to max 3000px if needed while maintaining aspect ratio
+      // Automatic Downscaling: Resize to max 2048px if needed while maintaining aspect ratio
       return await sharp(file.buffer)
         .rotate()
-        .resize({ width: 3000, height: 3000, fit: 'inside', withoutEnlargement: true })
+        .resize({ width: 2048, height: 2048, fit: 'inside', withoutEnlargement: true })
         .jpeg({ quality: 90, mozjpeg: true })
         .toBuffer();
     } catch (e) {
@@ -130,6 +130,18 @@ export class SocialMediaController {
       if (error) {
         res.status(401).json({ success: false, error });
         return;
+      }
+
+      // Early Token Validation: Check credentials before heavy media processing
+      if (!isDryRun) {
+        const validation = await service.validateToken();
+        if (!validation.valid) {
+          res.status(401).json({ 
+            success: false, 
+            error: `Authentication failed: ${validation.error || 'Invalid credentials'}` 
+          });
+          return;
+        }
       }
 
       const files = req.files as Express.Multer.File[];
@@ -227,6 +239,18 @@ export class SocialMediaController {
       if (error) {
         res.status(401).json({ success: false, error });
         return;
+      }
+
+      // Early Token Validation
+      if (!isDryRun) {
+        const validation = await service.validateToken();
+        if (!validation.valid) {
+          res.status(401).json({ 
+            success: false, 
+            error: `Authentication failed: ${validation.error || 'Invalid credentials'}` 
+          });
+          return;
+        }
       }
 
       const { id } = req.params;

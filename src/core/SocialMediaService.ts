@@ -88,10 +88,9 @@ export class SocialMediaService {
       requestId
     });
 
-    if (!isDryRun) {
-      this.ensureLogoCached(); // Fire and forget
-      await this.queue.addPersistentTask(requestId, this.platform, this.pageId, validated, validated.priority);
-    }
+    // Persist all tasks to Redis for monitoring (even dry runs)
+    this.ensureLogoCached(); // Fire and forget
+    await this.queue.addPersistentTask(requestId, this.platform, this.pageId, validated, validated.priority, isDryRun);
 
     return this.queue.add(async () => {
       const targets = [];
@@ -220,7 +219,7 @@ export class SocialMediaService {
           timestamp: new Date().toISOString()
         };
       }
-    }, validated.priority, true, isDryRun, isDryRun ? undefined : requestId);
+    }, validated.priority, true, isDryRun, requestId);
   }
 
   async updatePost(postId: string, newCaption: string, priority: WorkloadPriority = WorkloadPriority.HIGH, dryRun: boolean = false): Promise<FISResponse> {
@@ -229,10 +228,8 @@ export class SocialMediaService {
     logger.info('Queuing authoritative update', { requestId, postId, dryRun: isDryRun });
     StreamManager.emitQueueUpdate(this.platform, this.pageId, 'queued', { type: 'update', postId, isDryRun, requestId });
     
-    if (!isDryRun) {
-      this.ensureLogoCached();
-      await this.queue.addPersistentTask(requestId, this.platform, this.pageId, { action: 'update', postId, newCaption }, priority);
-    }
+    this.ensureLogoCached();
+    await this.queue.addPersistentTask(requestId, this.platform, this.pageId, { action: 'update', postId, newCaption }, priority, isDryRun);
 
     return this.queue.add(async () => {
       StreamManager.emitQueueUpdate(this.platform, this.pageId, 'processing', { 
@@ -258,7 +255,7 @@ export class SocialMediaService {
       const result = await this.getClient().updatePost(postId, newCaption);
       StreamManager.emitQueueUpdate(this.platform, this.pageId, result.success ? 'completed' : 'failed', { postId, requestId });
       return result;
-    }, priority, false, isDryRun, isDryRun ? undefined : requestId);
+    }, priority, false, isDryRun, requestId);
   }
 
   private ensureRobustCaption(caption?: string): string {
@@ -270,6 +267,10 @@ export class SocialMediaService {
 
   async getStats() {
     return await this.queue.getStats();
+  }
+
+  async validateToken(forceRealCheck: boolean = false) {
+    return await this.getClient().validateToken(forceRealCheck);
   }
 
   get stats() {

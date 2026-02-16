@@ -67,6 +67,7 @@ export class Database {
     await this.redis.hset(taskKey, {
       ...task,
       payload: JSON.stringify(task.payload),
+      is_dry_run: task.is_dry_run ? 'true' : 'false',
       created_at: task.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString()
     });

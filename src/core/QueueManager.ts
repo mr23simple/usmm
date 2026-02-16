@@ -25,7 +25,8 @@ export class QueueManager {
     platform: string,
     pageId: string,
     payload: any,
-    priority: number
+    priority: number,
+    isDryRun: boolean = false
   ) {
     await this.db.saveTask({
       id,
@@ -33,7 +34,8 @@ export class QueueManager {
       page_id: pageId,
       payload,
       priority,
-      status: 'pending'
+      status: 'pending',
+      is_dry_run: isDryRun
     });
   }
 
@@ -48,18 +50,18 @@ export class QueueManager {
     isDryRun: boolean = false,
     persistentId?: string
   ): Promise<T> {
-    if (isDryRun) {
-      return task();
-    }
-    
     const targetQueue = isPublishingTask ? this.publishQueue : QueueManager.globalGeneralQueue;
+    
+    // Prioritization: Penalize dry runs so they always fall below real requests.
+    // Real priorities: 10, 5, 0. Dry run priorities: -90, -95, -100.
+    const effectivePriority = isDryRun ? priority - 100 : priority;
     
     if (persistentId) {
       await this.updateTaskStatus(persistentId, 'processing');
     }
 
     try {
-      const result = await targetQueue.add(task, { priority });
+      const result = await targetQueue.add(task, { priority: effectivePriority });
       if (persistentId) {
         await this.updateTaskStatus(persistentId, 'completed');
       }
