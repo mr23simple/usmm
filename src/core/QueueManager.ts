@@ -63,12 +63,15 @@ export class QueueManager {
     try {
       const result = await targetQueue.add(task, { priority: effectivePriority });
       if (persistentId) {
-        await this.updateTaskStatus(persistentId, 'completed');
+        // Task completed successfully: remove it immediately to protect privacy/security
+        await this.db.deleteTask(persistentId);
       }
       return result;
     } catch (error: any) {
       if (persistentId) {
+        // Task failed: update status and set a short TTL (1 hour) for debugging before auto-deletion
         await this.updateTaskStatus(persistentId, 'failed', error.message);
+        await this.db.client.expire(`usmm:task:${persistentId}`, 3600);
       }
       throw error;
     }

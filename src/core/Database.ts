@@ -84,6 +84,11 @@ export class Database {
     });
   }
 
+  async deleteTask(id: string) {
+    await this.redis.del(`usmm:task:${id}`);
+    await this.redis.srem('usmm:tasks_index', id);
+  }
+
   async getTaskStats() {
     const taskIds = await this.redis.smembers('usmm:tasks_index');
     const stats: Record<string, number> = {};
@@ -92,6 +97,9 @@ export class Database {
       const status = await this.redis.hget(`usmm:task:${id}`, 'status');
       if (status) {
         stats[status] = (stats[status] || 0) + 1;
+      } else {
+        // Task has expired or been deleted, remove from index
+        await this.redis.srem('usmm:tasks_index', id);
       }
     }
     
