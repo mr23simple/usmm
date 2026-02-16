@@ -144,7 +144,7 @@ USMM includes a built-in framework that converts a simplified HTML/Tailwind-like
 When using `multipart/form-data`, attach your image/video files to the `media` field.
 *   **Image Limit**: 10MB per file.
 *   **Video Limit**: 100MB per file.
-*   **Auto-Optimization**: USMM automatically strips metadata, applies high-quality compression, and **automatically downscales images to 3000px** if they exceed platform limits, ensuring zero "Hard Fails" for high-res screenshots.
+*   **Auto-Optimization**: USMM automatically strips metadata, applies high-quality compression, and **automatically downscales images to 2048px** if they exceed platform limits, ensuring zero "Hard Fails" for high-res screenshots.
 *   **Protocol Compliance (v24.0)**: 
     *   **Photos**: Uploaded to `graph.facebook.com` and attached to feed via `media_fbid`.
     *   **Videos**: Uploaded via dedicated `graph-video.facebook.com` infrastructure. Feed publication is handled directly on the video node to ensure full compatibility with Page permissions.
@@ -204,20 +204,26 @@ Visit the root URL (`https://usmm.global-desk.top`) to view the **Spider Pipelin
 ---
 
 ## ⚡ Technical Specs
-*   **Security (Zero-Registration)**: 
+*   **Security & Privacy**: 
+    *   **Stateless Proxy**: Credentials are interpreted in-flight and never stored permanently.
+    *   **Rolling Cache (Redis)**: Account IDs and active filaments are cached in Redis with a **24-hour sliding expiration**. If an account is inactive for a day, all its references are automatically purged.
+    *   **Task Privacy**: Completed tasks are **immediately deleted** from the database. Failed tasks are retained for 1 hour for debugging before auto-deletion.
+    *   **Early Validation**: Authentication is verified *before* heavy processing (like image resizing) to save server resources.
     *   **Tenant-Aware Rate Limiting**: Requests are limited by a combined key of `Sender IP + x-platform-id`. This prevents distributed spam against specific accounts.
-    *   **Stateless Architecture**: No user database required; credentials are interpreted in-flight and never stored.
 *   **Multi-Tenant Isolation**: Every unique project receives a dedicated service instance and private priority queue.
 *   **Resource Management**: 
-    *   **Global Concurrency Cap**: Processing is strictly limited to **100 concurrent tasks** across all instances to ensure system stability and low CPU overhead.
+    *   **Priority System**: 
+        *   `10` (Critical): Immediate processing.
+        *   `5` (High): Elevated queue position.
+        *   `0` (Normal): Standard background processing.
+        *   **Dry Runs**: Automatically penalized (-100 priority) to ensure actual requests are always processed first.
+    *   **Global Concurrency Cap**: Processing is strictly limited to **100 concurrent tasks** across all instances.
     *   **UI Optimization**: The Spider Pipeline UI is rendered on a high-performance canvas, efficiently handling 100+ simultaneous animations.
-*   **Priority System**: 
-    *   `10` (Critical): Immediate processing.
-    *   `5` (High): Elevated queue position.
-    *   `0` (Normal): Standard background processing.
 *   **API Versions**: 
     *   Facebook: Graph API v24.0
     *   X / Twitter: API v2 (Tweets) & v1.1 (Media)
+    *   Slack: Webhook Integration
+*   **Protocol Compliance**: All external requests explicitly bypass proxies (`proxy: false`) for maximum reliability.
 *   **Strict Validation**: USMM performs real-time metadata validation for images (resolution/integrity) and structural validation for multi-part auth tokens.
 *   **Fail-Safe**: Automatic transition to text-only if media upload fails or is rejected by the target platform.
 
