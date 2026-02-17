@@ -28,6 +28,11 @@ const testInput = `
   <img src="https://api.slack.com/img/blocks/baking/cookie.png" alt="Cookie" />
   Mixed <i>context</i> element.
 </div>
+
+<select multiple>
+  <option value="opt1">Option 1</option>
+  <option value="opt2">Option 2</option>
+</select>
 `;
 
 console.log('--- USMM REGRESSION INPUT ---');
