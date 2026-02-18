@@ -11,3 +11,4 @@ public/cache/logos/*.png
 *.db-wal
 *.db-shm
 
+.env.local
