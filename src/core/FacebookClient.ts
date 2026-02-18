@@ -42,10 +42,10 @@ export class FacebookClient {
     form.append('published', 'false');
     if (asset.altText) form.append('caption', asset.altText);
 
-    const response = await axios.post(endpoint, form, {
+    const response = await this.requestWithRetry(() => axios.post(endpoint, form, {
       headers: form.getHeaders(),
       proxy: false
-    });
+    }));
 
     return response.data.id;
   }
@@ -64,14 +64,14 @@ export class FacebookClient {
     logger.debug('Starting chunked video upload to FB', { fileSize, chunks: Math.ceil(fileSize / CHUNK_SIZE) });
 
     // Phase 1: START
-    const startRes = await axios.post(endpoint, null, {
+    const startRes = await this.requestWithRetry(() => axios.post(endpoint, null, {
       params: {
         access_token: accessToken,
         upload_phase: 'start',
         file_size: fileSize
       },
       proxy: false
-    });
+    }));
 
     const uploadSessionId = startRes.data.upload_session_id;
     let startOffset = 0;
@@ -88,24 +88,24 @@ export class FacebookClient {
       form.append('start_offset', startOffset.toString());
       form.append('video_file_chunk', chunk, { filename: 'chunk.mp4', contentType: mimeType });
 
-      await axios.post(endpoint, form, {
+      await this.requestWithRetry(() => axios.post(endpoint, form, {
         headers: form.getHeaders(),
         proxy: false
-      });
+      }));
 
       startOffset = endOffset;
       logger.debug('Uploaded FB video chunk', { startOffset, total: fileSize });
     }
 
     // Phase 3: FINISH
-    const finishRes = await axios.post(endpoint, null, {
+    const finishRes = await this.requestWithRetry(() => axios.post(endpoint, null, {
       params: {
         access_token: accessToken,
         upload_phase: 'finish',
         upload_session_id: uploadSessionId
       },
       proxy: false
-    });
+    }));
 
     const videoId = finishRes.data.id || finishRes.data.video_id;
 
