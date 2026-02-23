@@ -152,17 +152,33 @@ export class TwitterClient {
   }
 
   private handleError(error: any): FISResponse {
-    logger.error('X (Twitter) API Error', { 
-      data: error.data,
-      message: error.message 
-    });
+    // Check for rate limiting (429)
+    const isRateLimited = error.code === 429 || 
+                          error.message?.includes('429') || 
+                          error.message?.includes('rate limit');
+    
+    if (isRateLimited) {
+      const retryAfter = error.rateLimit?.resetTime || 60;
+      logger.warn(`X (Twitter) API rate limited. Retry after ${retryAfter}s`, { 
+        retryAfter,
+        endpoint: error.request?.path 
+      });
+    } else {
+      logger.error('X (Twitter) API Error', { 
+        data: error.data,
+        message: error.message,
+        code: error.code 
+      });
+    }
 
     return {
       success: false,
       error: {
-        code: error.code?.toString() || 'X_API_ERROR',
+        code: isRateLimited ? 'RATE_LIMITED' : (error.code?.toString() || 'X_API_ERROR'),
         message: error.message,
         raw: error.data || error,
+        isRateLimited,
+        retryAfter: isRateLimited ? (error.rateLimit?.resetTime || 60) : undefined
       },
       timestamp: new Date().toISOString(),
     };

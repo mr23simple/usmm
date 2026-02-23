@@ -1,9 +1,13 @@
 import winston from 'winston';
 
-const { combine, timestamp, printf, colorize, json } = winston.format;
+const { combine, timestamp, printf, colorize, json, label } = winston.format;
 
-const consoleFormat = printf(({ level, message, timestamp, ...metadata }) => {
-  let msg = `${timestamp} [${level}]: ${message}`;
+// Service identifier for Dr.Oc monitoring
+const SERVICE_ID = 'USMM';
+
+const consoleFormat = printf(({ level, message, timestamp, label, ...metadata }) => {
+  const labelPart = label ? `[${label}]` : `[${SERVICE_ID}]`;
+  let msg = `${timestamp} ${labelPart} [${level}]: ${message}`;
   if (Object.keys(metadata).length > 0) {
     msg += ` ${JSON.stringify(metadata)}`;
   }
@@ -12,6 +16,7 @@ const consoleFormat = printf(({ level, message, timestamp, ...metadata }) => {
 
 export const logger = winston.createLogger({
   level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+  defaultMeta: { label: SERVICE_ID },
   format: combine(
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
     process.env.NODE_ENV === 'production' ? json() : combine(colorize(), consoleFormat)

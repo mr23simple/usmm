@@ -242,3 +242,18 @@ The system includes simulation scripts to verify high-concurrency handling and U
 1. `pnpm install`
 2. `pnpm dev` (Port 3005)
 3. `pnpm build`
+
+## 📝 Logging
+
+USMM uses structured logging with Winston. All log messages include a `[USMM]` service identifier for Dr.Oc monitoring compatibility.
+
+**Log Format:**
+```
+YYYY-MM-DD HH:mm:ss [USMM] [level]: message
+```
+
+**Log Files:**
+- `logs/combined.log` - All log levels
+- `logs/error.log` - Error level only
+
+Dr.Oc automatically identifies USMM logs via the `[USMM]` label for monitoring and incident detection.

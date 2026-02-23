@@ -143,15 +143,27 @@ export class FacebookClient {
     return false;
   }
 
-  private async requestWithRetry<T>(fn: () => Promise<T>, retries = 2, delay = 3000): Promise<T> {
+  private async requestWithRetry<T>(fn: () => Promise<T>, retries = 3, delay = 3000): Promise<T> {
     try {
       return await fn();
     } catch (error: any) {
       const statusCode = error.response?.status;
       const errorCode = error.response?.data?.error?.code;
       
+      // Handle rate limiting (429)
+      if (statusCode === 429) {
+        const retryAfter = error.response?.headers?.['retry-after'] || 60;
+        logger.warn(`Facebook API rate limited. Waiting ${retryAfter}s before retry...`, { 
+          retryAfter 
+        });
+        await new Promise(resolve => setTimeout(resolve, retryAfter * 1000));
+        if (retries > 0) {
+          return this.requestWithRetry(fn, retries - 1, delay);
+        }
+      }
+      
       // Retry on 500 (Internal Server Error) or code 1 (Unknown error)
-      if (retries > 0 && (statusCode === 500 || errorCode === 1)) {
+      if (retries > 0 && (statusCode === 500 || errorCode === 1 || statusCode === 503)) {
         logger.warn(`Facebook API transient error (Status: ${statusCode}, Code: ${errorCode}). Retrying...`, { 
           retriesLeft: retries 
         });
