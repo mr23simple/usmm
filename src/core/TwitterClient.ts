@@ -2,6 +2,7 @@ import { TwitterApi } from 'twitter-api-v2';
 import axios from 'axios';
 import type { FISResponse, MediaAsset } from '../types/index.js';
 import { logger } from '../utils/logger.js';
+import { BaseSocialClient } from './BaseSocialClient.js';
 
 interface TwitterCredentials {
   appKey: string;
@@ -10,11 +11,12 @@ interface TwitterCredentials {
   accessSecret: string;
 }
 
-export class TwitterClient {
+export class TwitterClient extends BaseSocialClient {
   private api: TwitterApi;
   private creds: TwitterCredentials;
 
   constructor(credentialsRaw: string) {
+    super('X (Twitter)');
     this.creds = this.parseCredentials(credentialsRaw);
     this.api = new TwitterApi({
       appKey: this.creds.appKey,
@@ -22,6 +24,18 @@ export class TwitterClient {
       accessToken: this.creds.accessToken,
       accessSecret: this.creds.accessSecret,
     });
+  }
+
+  protected shouldRetryOnError(statusCode: number | undefined, errorCode: number | undefined, error: any): boolean {
+    // X/Twitter specific: retry on 429, 500, 502, 503
+    if (statusCode === 429 || statusCode === 500 || statusCode === 502 || statusCode === 503) {
+      return true;
+    }
+    // Also retry on connection errors (no status code)
+    if (statusCode === undefined) {
+      return true;
+    }
+    return false;
   }
 
   private parseCredentials(raw: string): TwitterCredentials {
@@ -49,7 +63,8 @@ export class TwitterClient {
   }
 
   async uploadMedia(asset: MediaAsset): Promise<string> {
-    try {
+    // Wrap with retry logic
+    return await this.requestWithRetry(async () => {
       let mediaId: string;
       const isVideo = asset.type === 'video';
       const mimeType = asset.mimeType || (isVideo ? 'video/mp4' : 'image/jpeg');
@@ -72,10 +87,7 @@ export class TwitterClient {
       }
 
       return mediaId;
-    } catch (error: any) {
-      logger.error('Twitter Media Upload Error', { error: error.message });
-      throw error;
-    }
+    });
   }
 
   async validateToken(forceRealCheck: boolean = false): Promise<{ valid: boolean; name?: string; error?: string }> {
@@ -111,7 +123,8 @@ export class TwitterClient {
         tweetData.media = { media_ids: media.map(m => m.id) };
       }
 
-      const response = await this.api.v2.tweet(tweetData);
+      // Wrap with retry logic
+      const response = await this.requestWithRetry(() => this.api.v2.tweet(tweetData));
 
       return {
         success: true,
@@ -125,8 +138,6 @@ export class TwitterClient {
 
   async createStory(mediaId: string, type: 'image' | 'video' = 'image'): Promise<FISResponse> {
     // Twitter doesn't have a public "Story" API like FB. 
-    // We could potentially implement "Fleets" if they ever return, or just another tweet.
-    // For now, we return a failure or a fallback.
     return {
       success: false,
       error: { code: 'NOT_SUPPORTED', message: 'Stories (Fleets) are not supported on X.' },
@@ -145,8 +156,6 @@ export class TwitterClient {
 
   async getProfilePicUrl(): Promise<string> {
     const user = await this.api.v2.me({ 'user.fields': ['profile_image_url'] });
-    // Twitter returns a 'normal' sized image by default, we want it larger if possible
-    // normal is 48x48, we can replace '_normal' with '' for original size or '_400x400'
     const url = user.data.profile_image_url;
     return url ? url.replace('_normal', '_400x400') : 'https://placehold.co/400?text=Twitter';
   }

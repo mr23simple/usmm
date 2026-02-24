@@ -204,6 +204,10 @@ Visit the root URL (`https://usmm.global-desk.top`) to view the **Spider Pipelin
 ---
 
 ## ⚡ Technical Specs
+*   **Shared Resilience Layer**: All social media clients (Facebook, X/Twitter) inherit from `BaseSocialClient` which provides:
+    *   **Automatic Retry**: Exponential backoff on transient errors (500, 502, 503) and rate limits (429)
+    *   **Rate Limit Handling**: Automatic wait-and-retry when API rate limits are hit
+    *   **Connection Error Recovery**: Retry on connection timeouts and network errors
 *   **Security & Privacy**: 
     *   **Stateless Proxy**: Credentials are interpreted in-flight and never stored permanently.
     *   **Rolling Cache (Redis)**: Account IDs and active filaments are cached in Redis with a **24-hour sliding expiration**. If an account is inactive for a day, all its references are automatically purged.
