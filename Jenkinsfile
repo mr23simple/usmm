@@ -43,8 +43,8 @@ pipeline {
                                     git clone https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git usmm
                                 fi
                                 cd /var/www/usmm && \\
-                                sudo git config --global --add safe.directory /var/www/usmm && \\
-                                sudo git pull origin main && \\
+                                sudo -E git config --global --add safe.directory /var/www/usmm && \\
+                                sudo -E git pull origin main && \\
                                 sudo pnpm install && \\
                                 sudo pnpm run build && \\
                                 sudo pm2 restart ${SERVICE_NAME}
