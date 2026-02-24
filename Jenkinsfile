@@ -39,7 +39,8 @@ pipeline {
                         sh '''
                             ssh -o StrictHostKeyChecking=no ubuntu@${TARGET_SERVER} "
                                 cd /var/www && \\
-                                if [ ! -d \"usmm\" ]; then
+                                if [ ! -d \"usmm/.git\" ]; then
+                                    rm -rf usmm
                                     git clone https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git usmm
                                 fi
                                 cd /var/www/usmm && \\
