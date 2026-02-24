@@ -45,12 +45,12 @@ pipeline {
                                     sudo git clone https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git usmm
                                 fi
 
-                                # Run the updates inside the specific directory
-                                sudo -i bash -c 'cd /var/www/usmm && \\
+                                sudo -i bash -c 'export PATH=$PATH:/usr/local/bin:/usr/bin && \\
+                                    cd /var/www/usmm && \\
                                     git config --global --add safe.directory /var/www/usmm && \\
                                     git pull https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git main && \\
-                                    /root/.local/share/pnpm/pnpm install && \\
-                                    /root/.local/share/pnpm/pnpm run build && \\
+                                    $(which node || echo /usr/bin/node) /root/.local/share/pnpm/pnpm install && \\
+                                    $(which node || echo /usr/bin/node) /root/.local/share/pnpm/pnpm run build && \\
                                     pm2 restart ${SERVICE_NAME}'
                             "
                         '''
