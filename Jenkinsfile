@@ -4,6 +4,10 @@
 pipeline {
     agent any
     
+    tools {
+        nodejs 'nodejs'
+    }
+    
     environment {
         TARGET_SERVER = '138.2.50.218'
         TARGET_PATH = '/var/www/usmm'
@@ -27,7 +31,7 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 echo 'Installing dependencies...'
-                sh 'pnpm install --frozen-lockfile || npm install'
+                sh 'npm install -g pnpm && pnpm install --frozen-lockfile'
             }
         }
         
@@ -52,7 +56,7 @@ pipeline {
             steps {
                 echo 'Deploying USMM to production...'
                 sh '''
-                    ssh -o StrictHostKeyChecking=no ubuntu@${TARGET_SERVER} '
+                    ssh -o StrictHostKeyChecking=no root@${TARGET_SERVER} '
                         cd ${TARGET_PATH} && \\
                         git pull origin main && \\
                         pnpm install && \\
