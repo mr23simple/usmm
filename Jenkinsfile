@@ -38,17 +38,20 @@ pipeline {
                     sshagent(['oci-web-server']) {
                         sh '''
                             ssh -o StrictHostKeyChecking=no ubuntu@${TARGET_SERVER} "
-                                cd /var/www && \\
-                                if [ ! -d \"usmm/.git\" ]; then
-                                    rm -rf usmm
-                                    git clone https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git usmm
+                                if [ ! -d \"/var/www/usmm/.git\" ]; then
+                                    sudo mkdir -p /var/www
+                                    cd /var/www
+                                    sudo rm -rf usmm
+                                    sudo git clone https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git usmm
                                 fi
-                                cd /var/www/usmm && \\
-                                sudo -i git config --global --add safe.directory /var/www/usmm && \\
-                                sudo -i git pull https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git main && \\
-                                sudo -i /root/.local/share/pnpm/pnpm install && \\
-                                sudo -i /root/.local/share/pnpm/pnpm run build && \\
-                                sudo -i pm2 restart ${SERVICE_NAME}
+
+                                # Run the updates inside the specific directory
+                                sudo -i bash -c 'cd /var/www/usmm && \\
+                                    git config --global --add safe.directory /var/www/usmm && \\
+                                    git pull https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git main && \\
+                                    /root/.local/share/pnpm/pnpm install && \\
+                                    /root/.local/share/pnpm/pnpm run build && \\
+                                    pm2 restart ${SERVICE_NAME}'
                             "
                         '''
                     }
