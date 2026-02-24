@@ -11,6 +11,7 @@ pipeline {
     environment {
         TARGET_SERVER = '138.2.50.218'
         TARGET_PATH = '/var/www/usmm'
+        SERVICE_NAME_1 = 'usmm'
     }
     
     options {
@@ -37,20 +38,13 @@ pipeline {
                     sshagent(['oci-web-server']) {
                         sh """
                             ssh -o StrictHostKeyChecking=no ubuntu@${TARGET_SERVER} "
-                                if [ ! -d /var/www/usmm/.git ]; then
-                                    sudo mkdir -p /var/www
-                                    cd /var/www
-                                    sudo rm -rf usmm
-                                    sudo git clone https://${GITHUB_USER}:${GITHUB_TOKEN}@github.com/rtxrs/usmm.git usmm
-                                fi
-
                                 sudo bash <<'EOF'
                                     # 1. Setup the environment (Literal values)
                                     export NODE_BIN_DIR='/root/.nvm/versions/node/v24.13.0/bin'
                                     export PNPM_BIN_DIR='/root/.local/share/pnpm'
                                     
-                                    # 2. Update PATH (Use $$$ to escape for Groovy AND Shell)
-                                    export PATH=$$NODE_BIN_DIR:$$PNPM_BIN_DIR:$$PATH
+                                    # 2. Update PATH (Use \\\\\\\$ to escape for Groovy AND Shell)
+                                    export PATH=\\\$NODE_BIN_DIR:\\\$PNPM_BIN_DIR:\\\$PATH
                                     
                                     # 3. Navigate and pull
                                     cd /var/www/usmm
@@ -62,10 +56,10 @@ pipeline {
                                     pnpm run build
                                     
                                     # 5. Restart or Start Services
-                                    pm2 restartOrReload ecosystem.config.cjs || true
+                                    pm2 restart ecosystem.config.cjs
                                     pm2 save
 EOF
-                            "
+"
                         """
                     }
                 }
