@@ -83,6 +83,7 @@ export class FacebookClient {
     }));
 
     const uploadSessionId = startRes.data.upload_session_id;
+    const videoId = startRes.data.video_id; // Get video ID from start phase
     let startOffset = 0;
 
     // Phase 2: APPEND
@@ -107,7 +108,7 @@ export class FacebookClient {
     }
 
     // Phase 3: FINISH
-    const finishRes = await this.requestWithRetry(() => axios.post(endpoint, null, {
+    await this.requestWithRetry(() => axios.post(endpoint, null, {
       params: {
         access_token: accessToken,
         upload_phase: 'finish',
@@ -115,8 +116,6 @@ export class FacebookClient {
       },
       proxy: false
     }));
-
-    const videoId = finishRes.data.id || finishRes.data.video_id;
 
     // Wait for processing to begin and poll for readiness
     logger.debug('FB video upload finished, polling for readiness...', { videoId });
