@@ -82,8 +82,8 @@ pipeline {
                                     pnpm run build
                                     
                                     # 5. Restart or Start Services
-                                    pm2 restart ecosystem.config.cjs
-                                    pm2 save
+                                    pm2 delete usmm || true
+                                    pm2 start ecosystem.config.cjs
 EOF
 "
                         """
