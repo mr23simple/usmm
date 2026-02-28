@@ -85,7 +85,7 @@ pipeline {
                                     pm2 delete usmm || true
                                     pm2 start ecosystem.config.cjs
                                     pm2 save
-                                    EOF
+EOF
                                     "
                                     """
                                     }                }
